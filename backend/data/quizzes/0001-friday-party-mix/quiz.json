@@ -1,0 +1,87 @@
+{
+  "version": 1,
+  "exportedAt": "2026-04-06T18:33:14.904Z",
+  "storageKey": "0001-friday-party-mix",
+  "quiz": {
+    "title": "Friday Party Mix",
+    "description": "A demo quiz with both classic and media-ready questions.",
+    "mode": "classic",
+    "accentColor": "#ff7a59",
+    "isPublished": true,
+    "questions": [
+      {
+        "prompt": "Which city is known as the City of Canals?",
+        "helpText": "A warm-up question for the room.",
+        "type": "multiple_choice",
+        "order": 0,
+        "options": [
+          {
+            "id": "A",
+            "text": "Venice"
+          },
+          {
+            "id": "B",
+            "text": "Prague"
+          },
+          {
+            "id": "C",
+            "text": "Amsterdam"
+          },
+          {
+            "id": "D",
+            "text": "Lisbon"
+          }
+        ],
+        "correctAnswer": "A",
+        "mediaType": "none",
+        "mediaUrl": "",
+        "timeLimitSeconds": 20,
+        "points": 100,
+        "penaltyPoints": 40
+      },
+      {
+        "prompt": "Name the artist behind the album \"Future Nostalgia\".",
+        "helpText": "Text questions are reviewed by the admin.",
+        "type": "text",
+        "order": 1,
+        "options": [],
+        "correctAnswer": "Dua Lipa",
+        "mediaType": "none",
+        "mediaUrl": "",
+        "timeLimitSeconds": 25,
+        "points": 150,
+        "penaltyPoints": 50
+      },
+      {
+        "prompt": "Pick the snack that is traditionally made from chickpeas.",
+        "helpText": "",
+        "type": "multiple_choice",
+        "order": 2,
+        "options": [
+          {
+            "id": "A",
+            "text": "Falafel"
+          },
+          {
+            "id": "B",
+            "text": "Kimchi"
+          },
+          {
+            "id": "C",
+            "text": "Gelato"
+          },
+          {
+            "id": "D",
+            "text": "Pierogi"
+          }
+        ],
+        "correctAnswer": "A",
+        "mediaType": "none",
+        "mediaUrl": "",
+        "timeLimitSeconds": 20,
+        "points": 100,
+        "penaltyPoints": 40
+      }
+    ]
+  }
+}

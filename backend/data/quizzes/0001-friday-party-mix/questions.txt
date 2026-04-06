@@ -1,0 +1,45 @@
+Quiz: Friday Party Mix
+
+Description: A demo quiz with both classic and media-ready questions.
+
+Mode: classic
+
+Accent color: #ff7a59
+
+
+
+Question 1
+Prompt: Which city is known as the City of Canals?
+Type: multiple_choice
+Timer: 20s
+Points: 100
+Penalty: 40
+Help: A warm-up question for the room.
+Options:
+- A: Venice
+- B: Prague
+- C: Amsterdam
+- D: Lisbon
+Correct answer: A
+
+Question 2
+Prompt: Name the artist behind the album "Future Nostalgia".
+Type: text
+Timer: 25s
+Points: 150
+Penalty: 50
+Help: Text questions are reviewed by the admin.
+Correct answer: Dua Lipa
+
+Question 3
+Prompt: Pick the snack that is traditionally made from chickpeas.
+Type: multiple_choice
+Timer: 20s
+Points: 100
+Penalty: 40
+Options:
+- A: Falafel
+- B: Kimchi
+- C: Gelato
+- D: Pierogi
+Correct answer: A

@@ -1,0 +1,91 @@
+import { useMemo, useState } from 'react'
+import { useI18n } from '../../context/I18nContext'
+import { api, assetUrl } from '../../services/api'
+
+const presets = [
+  'emoji:\u{1F389}',
+  'emoji:\u{1FAA9}',
+  'emoji:\u{1F680}',
+  'emoji:\u{1F984}',
+  'emoji:\u{1F3A7}',
+  'emoji:\u{1F525}',
+  'emoji:\u{1F31F}',
+  'emoji:\u{1F308}',
+  'emoji:\u{1F47E}',
+  'emoji:\u{1F3B2}',
+  'emoji:\u{1F43B}',
+  'emoji:\u{1F99A}',
+]
+
+export function AvatarPicker({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange: (value: string) => void
+}) {
+  const { t } = useI18n()
+  const [uploading, setUploading] = useState(false)
+  const [expanded, setExpanded] = useState(false)
+
+  const visiblePresets = useMemo(() => {
+    if (expanded) return presets
+
+    const initial = presets.slice(0, 6)
+    if (value.startsWith('emoji:') && !initial.includes(value) && presets.includes(value)) {
+      return [...initial, value]
+    }
+
+    return initial
+  }, [expanded, value])
+
+  return (
+    <div className="avatar-picker">
+      <div className="avatar-grid">
+        {visiblePresets.map((preset) => (
+          <button
+            key={preset}
+            className={preset === value ? 'avatar-choice active' : 'avatar-choice'}
+            onClick={() => onChange(preset)}
+            type="button"
+          >
+            {preset.replace('emoji:', '')}
+          </button>
+        ))}
+      </div>
+      {presets.length > 6 ? (
+        <button className="ghost-button avatar-toggle" onClick={() => setExpanded((current) => !current)} type="button">
+          <span>{expanded ? '^' : 'v'}</span>
+          {expanded ? t('join.lessAvatars') : t('join.moreAvatars')}
+        </button>
+      ) : null}
+      <label className="file-trigger">
+        <input
+          accept="image/*"
+          onChange={async (event) => {
+            const file = event.target.files?.[0]
+            if (!file) return
+
+            setUploading(true)
+            try {
+              const result = await api.uploadAvatar(file)
+              onChange(result.url)
+            } finally {
+              setUploading(false)
+              event.currentTarget.value = ''
+            }
+          }}
+          type="file"
+        />
+        {uploading ? t('common.loading') : t('join.uploadImage')}
+      </label>
+      <div className="avatar-preview">
+        {value.startsWith('emoji:') ? (
+          <span className="avatar-large">{value.replace('emoji:', '')}</span>
+        ) : (
+          <img alt="Selected avatar" className="avatar-photo" src={assetUrl(value)} />
+        )}
+      </div>
+    </div>
+  )
+}
