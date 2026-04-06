@@ -76,13 +76,24 @@ function upload<T>(path: string, file: File, options: UploadOptions = {}) {
       reject(new Error('Upload failed'))
     }
 
+    xhr.onabort = () => {
+      reject(new Error('Upload was cancelled'))
+    }
+
     xhr.onload = () => {
-      const payload = xhr.responseText
-        ? (JSON.parse(xhr.responseText) as { message?: string })
-        : null
+      let payload: { message?: string } | T | null = null
+
+      if (xhr.responseText) {
+        try {
+          payload = JSON.parse(xhr.responseText) as { message?: string } | T
+        } catch {
+          reject(new Error(xhr.responseText || 'Upload failed'))
+          return
+        }
+      }
 
       if (xhr.status < 200 || xhr.status >= 300) {
-        reject(new Error(payload?.message || 'Upload failed'))
+        reject(new Error((payload as { message?: string } | null)?.message || 'Upload failed'))
         return
       }
 
