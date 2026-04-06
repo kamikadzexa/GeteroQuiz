@@ -188,7 +188,7 @@ async function uploadQuizMedia(req, res, next) {
       return res.status(400).json({ message: 'No file was uploaded' });
     }
 
-    const upload = await saveUploadedQuizMedia(req.params.quizId, req.file);
+    const upload = req.quizMediaUpload || await saveUploadedQuizMedia(req.params.quizId, req.file);
     await syncQuizStorage(req.params.quizId);
 
     return res.status(201).json({

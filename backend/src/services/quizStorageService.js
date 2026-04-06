@@ -237,6 +237,28 @@ async function saveUploadedQuizMedia(quizId, file) {
   };
 }
 
+async function prepareQuizMediaUpload(quizId, originalname) {
+  ensureStorageRoots();
+  const quiz = await Quiz.findByPk(quizId);
+  if (!quiz) {
+    throw new Error('Quiz not found');
+  }
+
+  const storageKey = await ensureQuizStorageKey(quiz);
+  const mediaDirectory = getQuizMediaDirectory(storageKey);
+  fs.mkdirSync(mediaDirectory, { recursive: true });
+
+  const filename = `${Date.now()}-${sanitizeFilename(originalname)}`;
+
+  return {
+    storageKey,
+    mediaDirectory,
+    filename,
+    absolutePath: path.join(mediaDirectory, filename),
+    url: getQuizPublicMediaPath(storageKey, filename),
+  };
+}
+
 async function createQuizExportArchive(quizId) {
   const quiz = await syncQuizStorage(quizId);
   if (!quiz) {
@@ -354,6 +376,7 @@ module.exports = {
   deleteQuizStorage,
   importQuizArchive,
   loadQuizWithQuestions,
+  prepareQuizMediaUpload,
   saveUploadedQuizMedia,
   syncQuizStorage,
 };
