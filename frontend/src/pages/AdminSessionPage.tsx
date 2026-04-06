@@ -22,17 +22,26 @@ export function AdminSessionPage() {
   const timerPaused = Boolean(sessionState?.autoAdvancePaused)
   const inReview = sessionState?.phase === 'review'
   const timerCounting = timerEnabled && inReview && !timerPaused
-  const questionSecondsLeft = useCountdown(sessionState?.phase === 'open' ? sessionState.closesAt : null)
-  const autoCountdownLeft = useCountdown(timerCounting ? (sessionState?.autoAdvanceAt ?? null) : null)
+  const questionSecondsLeft = useCountdown(
+    sessionState?.phase === 'open' ? sessionState.closesAt : null,
+    sessionState?.serverNow ?? null,
+  )
+  const autoCountdownLeft = useCountdown(
+    timerCounting ? (sessionState?.autoAdvanceAt ?? null) : null,
+    sessionState?.serverNow ?? null,
+  )
 
   const answerDuration = sessionState?.answerDurationSeconds ?? 60
   const advanceDuration = sessionState?.autoAdvanceDurationSeconds ?? 15
+  const answerCountdown = sessionState?.phase === 'open'
+    ? (sessionState.closesAt ? questionSecondsLeft : sessionState.questionRemainingSeconds)
+    : answerDuration
   const answerProgress = sessionState?.phase === 'open' && answerDuration > 0
-    ? Math.max(0, Math.min(100, (questionSecondsLeft / answerDuration) * 100))
+    ? Math.max(0, Math.min(100, (answerCountdown / answerDuration) * 100))
     : 0
-  const advanceCountdown = timerPaused
-    ? (sessionState?.autoAdvanceRemainingSeconds ?? 0)
-    : autoCountdownLeft
+  const advanceCountdown = sessionState?.autoAdvanceAt
+    ? autoCountdownLeft
+    : (sessionState?.autoAdvanceRemainingSeconds ?? advanceDuration)
   const advanceProgress = (timerCounting || timerPaused) && inReview && advanceDuration > 0
     ? Math.max(0, Math.min(100, (advanceCountdown / advanceDuration) * 100))
     : 0
@@ -309,10 +318,12 @@ export function AdminSessionPage() {
             </span>
           </div>
 
-          <div className={`session-timer-block${sessionState.phase === 'open' ? ` timer-${answerTone}` : ''}`} style={{ marginBottom: 0 }}>
+          <div className={`session-timer-block${sessionState.phase === 'open'
+            ? `${timerPaused ? ' paused' : ` timer-${answerTone}`}`
+            : ''}`} style={{ marginBottom: 0 }}>
             <div className="inline-header">
               <strong>{t('admin.answerTimer')}</strong>
-              <span>{sessionState.phase === 'open' ? questionSecondsLeft : answerDuration}s</span>
+              <span>{answerCountdown}s</span>
             </div>
             <div className="session-timer-track">
               <div className="session-timer-fill" style={{ width: `${answerProgress}%` }} />
@@ -400,7 +411,7 @@ export function AdminSessionPage() {
       <section className="panel">
         <div className="inline-header">
           <h2>{t('admin.players')}</h2>
-          <span className="chip active">{sessionState.joinCode}</span>
+          <span className="chip">{sessionState.joinCode}</span>
         </div>
         <div className="admin-player-list">
           {sessionState.players.map((player) => (

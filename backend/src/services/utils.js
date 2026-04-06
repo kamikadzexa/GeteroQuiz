@@ -1,6 +1,6 @@
 function createJoinCode(length = 5) {
-  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  return Array.from({ length }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('');
+  const digits = '0123456789';
+  return Array.from({ length }, () => digits[Math.floor(Math.random() * digits.length)]).join('');
 }
 
 function createRejoinCode(length = 4) {

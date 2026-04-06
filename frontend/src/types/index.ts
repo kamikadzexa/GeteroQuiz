@@ -48,7 +48,9 @@ export interface SessionState {
   playerCount: number
   connectedPlayerCount: number
   currentQuestion: Question | null
+  serverNow: string
   closesAt: string | null
+  questionRemainingSeconds: number
   answerDurationSeconds: number
   autoAdvanceAt: string | null
   autoAdvanceEnabled: boolean

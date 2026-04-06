@@ -22,8 +22,11 @@ export function QuizPlayPage() {
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const questionSecondsLeft = useCountdown(session?.phase === 'open' ? session.closesAt : null)
-  const autoAdvanceSecondsLeft = useCountdown(session?.autoAdvanceAt ?? null)
+  const questionSecondsLeft = useCountdown(
+    session?.phase === 'open' ? session.closesAt : null,
+    session?.serverNow ?? null,
+  )
+  const autoAdvanceSecondsLeft = useCountdown(session?.autoAdvanceAt ?? null, session?.serverNow ?? null)
 
   async function refresh() {
     if (!player) return
@@ -135,12 +138,16 @@ export function QuizPlayPage() {
       : 'question-card'
 
   const activeTimer =
-    session && currentQuestion && session.phase === 'open' && (session.answerDurationSeconds ?? currentQuestion.timeLimitSeconds) > 0 && session.closesAt
+    session &&
+    currentQuestion &&
+    session.phase === 'open' &&
+    (session.answerDurationSeconds ?? currentQuestion.timeLimitSeconds) > 0 &&
+    (session.closesAt || session.autoAdvancePaused)
       ? {
           label: t('play.answerTimer'),
           totalSeconds: session.answerDurationSeconds ?? currentQuestion.timeLimitSeconds,
-          remainingSeconds: questionSecondsLeft,
-          paused: false,
+          remainingSeconds: session.closesAt ? questionSecondsLeft : session.questionRemainingSeconds,
+          paused: session.autoAdvancePaused,
         }
       : session && session.autoAdvanceEnabled && session.status !== 'finished' && session.phase !== 'open'
         ? {
@@ -189,8 +196,7 @@ export function QuizPlayPage() {
             </strong>
           </div>
           <div className="pill-row">
-            <span className="chip active">{joinCode}</span>
-            {activeTimer ? <span className="timer-pill">{Math.max(activeTimer.remainingSeconds, 0)}s</span> : null}
+            <span className="chip">{joinCode}</span>
           </div>
         </div>
 

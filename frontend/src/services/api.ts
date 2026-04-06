@@ -85,6 +85,12 @@ export const api = {
       { method: 'PUT', body: JSON.stringify(payload) },
       token,
     ),
+  deleteQuiz: (token: string, quizId: string | number) =>
+    request(
+      `/quizzes/${quizId}`,
+      { method: 'DELETE' },
+      token,
+    ),
   exportQuiz: async (token: string, quizId: string | number) => {
     const response = await fetch(`${API_BASE}/quizzes/${quizId}/export`, {
       headers: {

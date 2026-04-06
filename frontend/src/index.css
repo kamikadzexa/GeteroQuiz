@@ -418,6 +418,11 @@ h3 {
   margin-top: 1rem;
 }
 
+.status-strip > div:first-child {
+  display: grid;
+  gap: 0.35rem;
+}
+
 .choice-grid,
 .session-header-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -479,6 +484,10 @@ h3 {
   display: grid;
   gap: 1rem;
   margin-top: 1.2rem;
+}
+
+.form-panel .form-grid {
+  margin-bottom: 1.2rem;
 }
 
 .form-grid label,
@@ -604,8 +613,37 @@ select:focus {
 }
 
 .avatar-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
   width: fit-content;
   padding: 0.65rem 0.9rem;
+}
+
+.avatar-toggle-icon {
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 999px;
+  background: rgba(255, 122, 89, 0.16);
+  position: relative;
+  flex-shrink: 0;
+}
+
+.avatar-toggle-icon::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0.38rem;
+  height: 0.38rem;
+  border-right: 2px solid rgba(36, 21, 51, 0.7);
+  border-bottom: 2px solid rgba(36, 21, 51, 0.7);
+  transform: translate(-50%, -62%) rotate(45deg);
+  transition: transform 180ms ease;
+}
+
+.avatar-toggle-icon.expanded::before {
+  transform: translate(-50%, -38%) rotate(-135deg);
 }
 
 .file-trigger input {
@@ -716,11 +754,19 @@ select:focus {
 }
 
 .media-block {
+  display: block;
   width: 100%;
-  max-height: 24rem;
   border-radius: 1.15rem;
-  object-fit: cover;
   border: 1px solid var(--border);
+}
+
+.media-visual {
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: 24rem;
+  margin-inline: auto;
+  object-fit: contain;
 }
 
 .option-grid {
@@ -873,6 +919,10 @@ select:focus {
 
 .leaderboard.compact {
   margin-top: 0;
+}
+
+.compact-panel .leaderboard.compact {
+  margin-top: 0.85rem;
 }
 
 .leaderboard-row,

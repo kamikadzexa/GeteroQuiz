@@ -40,7 +40,7 @@ export function PlayerJoinPage() {
   }, [])
 
   useEffect(() => {
-    if (!joinCode || joinCode.length < 4) {
+    if (!joinCode || joinCode.length < 5) {
       setPreview(null)
       return
     }
@@ -172,9 +172,10 @@ export function PlayerJoinPage() {
         <label>
           <span>{t('join.sessionCode')}</span>
           <input
-            maxLength={6}
-            onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
-            placeholder="AB12C"
+            inputMode="numeric"
+            maxLength={5}
+            onChange={(event) => setJoinCode(event.target.value.replace(/\D/g, ''))}
+            placeholder="12345"
             value={joinCode}
           />
         </label>

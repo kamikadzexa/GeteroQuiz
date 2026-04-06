@@ -23,12 +23,12 @@ export function QuestionMedia({ question }: { question: Question }) {
   const key = `${question.id}-${question.mediaVersion ?? 'base'}-${question.mediaUrl}`
 
   if (question.mediaType === 'image') {
-    return <img alt="" className="media-block" src={source} />
+    return <img alt="" className="media-block media-visual" src={source} />
   }
 
   if (question.mediaType === 'audio') {
     return <audio key={key} className="media-block" controls autoPlay ref={audioRef} src={source} />
   }
 
-  return <video key={key} className="media-block" controls autoPlay ref={videoRef} src={source} />
+  return <video key={key} className="media-block media-visual" controls autoPlay ref={videoRef} src={source} />
 }

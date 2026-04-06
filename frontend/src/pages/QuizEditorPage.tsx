@@ -52,6 +52,10 @@ export function QuizEditorPage() {
 
   const questions = Array.isArray(quiz.questions) ? quiz.questions : []
 
+  function confirmDeleteQuiz() {
+    return window.confirm(`${t('editor.delete')}?`)
+  }
+
   function downloadBlob(blob: Blob, filename: string) {
     const url = window.URL.createObjectURL(blob)
     const anchor = document.createElement('a')
@@ -68,9 +72,32 @@ export function QuizEditorPage() {
           <span className="eyebrow">{t('editor.badge')}</span>
           <h1>{quiz.title}</h1>
         </div>
-        <button className="ghost-button" onClick={() => navigate('/admin')} type="button">
-          {t('editor.back')}
-        </button>
+        <div className="action-row">
+          <button
+            className="ghost-button danger-button"
+            disabled={saving}
+            onClick={async () => {
+              if (!confirmDeleteQuiz()) return
+
+              setSaving(true)
+              setError('')
+              try {
+                await api.deleteQuiz(token, quiz.id)
+                navigate('/admin')
+              } catch (deleteError) {
+                setError(deleteError instanceof Error ? deleteError.message : 'Could not delete quiz')
+              } finally {
+                setSaving(false)
+              }
+            }}
+            type="button"
+          >
+            {t('editor.delete')}
+          </button>
+          <button className="ghost-button" onClick={() => navigate('/admin')} type="button">
+            {t('editor.back')}
+          </button>
+        </div>
       </div>
 
       <div className="editor-meta">

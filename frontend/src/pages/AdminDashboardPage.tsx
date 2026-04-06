@@ -39,6 +39,10 @@ export function AdminDashboardPage() {
     setSessions(nextSessions)
   }
 
+  function confirmDeleteQuiz() {
+    return window.confirm(`${t('editor.delete')}?`)
+  }
+
   useEffect(() => {
     if (!token) return
     refreshDashboard().catch((loadError) => {
@@ -286,6 +290,27 @@ export function AdminDashboardPage() {
                   type="button"
                 >
                   {t('editor.exportQuiz')}
+                </button>
+                <button
+                  className="ghost-button danger-button"
+                  disabled={busy}
+                  onClick={async () => {
+                    if (!confirmDeleteQuiz()) return
+
+                    setBusy(true)
+                    setError('')
+                    try {
+                      await api.deleteQuiz(token, quiz.id)
+                      await refreshDashboard()
+                    } catch (deleteError) {
+                      setError(deleteError instanceof Error ? deleteError.message : 'Could not delete quiz')
+                    } finally {
+                      setBusy(false)
+                    }
+                  }}
+                  type="button"
+                >
+                  {t('editor.delete')}
                 </button>
               </div>
             </article>

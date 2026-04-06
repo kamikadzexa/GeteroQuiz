@@ -1,0 +1,70 @@
+Quiz: ARE YOU SURE?
+
+Description: 
+
+Mode: classic
+
+Accent color: #ff6b6b
+
+
+
+Question 1
+Prompt: Километр это?
+Type: multiple_choice
+Timer: 20s
+Points: 100
+Penalty: 50
+Help: *Не миля*
+Options:
+- A: Единица измерения
+- B: 1000 метров
+- C: не знаю
+- D: AMURICA
+Correct answer: D
+Media type: audio
+Media: /quiz-data/0003-test/media/1775507414012-wtf-is-a-kilometer.mp3
+
+Question 2
+Prompt: TEST
+Type: multiple_choice
+Timer: 20s
+Points: 100
+Penalty: 50
+Options:
+- A: Option A
+- B: Option B
+- C: Option C
+- D: Option D
+Correct answer: A
+Media type: image
+Media: https://i1.sndcdn.com/artworks-w4XMfVxJbrOLCUOo-ZjQbdg-t500x500.png
+
+Question 3
+Prompt: New question
+Type: multiple_choice
+Timer: 20s
+Points: 100
+Penalty: 50
+Options:
+- A: Option A
+- B: Option B
+- C: Option C
+- D: Option D
+Correct answer: A
+Media type: image
+Media: /quiz-data/0003-test/media/1775507614681-1cf08ff9ac6a4001831f9de9177869e0H3000W3000_464_464.jpg
+
+Question 4
+Prompt: New question
+Type: multiple_choice
+Timer: 20s
+Points: 100
+Penalty: 50
+Options:
+- A: Option A
+- B: Option B
+- C: Option C
+- D: Option D
+Correct answer: A
+Media type: video
+Media: /quiz-data/0003-test/media/1775507678029-YTDown-com_YouTube_SFM-WHAT-THE-FUCK-IS-A-KILOMETER_Media_Y-3IV11_ZgA_001_1080p.mp4

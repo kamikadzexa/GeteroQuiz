@@ -1,5 +1,6 @@
 const {
   createQuizExportArchive,
+  deleteQuizStorage,
   importQuizArchive,
   saveUploadedQuizMedia,
   syncQuizStorage,
@@ -85,6 +86,24 @@ async function updateQuiz(req, res, next) {
     }
 
     return res.json(updatedQuiz);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+async function deleteQuiz(req, res, next) {
+  try {
+    const quiz = await Quiz.findByPk(req.params.quizId);
+    if (!quiz) {
+      return res.status(404).json({ message: 'Quiz not found' });
+    }
+
+    await req.app.locals.runtimeService.deleteSessionsForQuiz(quiz.id);
+    const { storageKey } = quiz;
+    await quiz.destroy();
+    deleteQuizStorage(storageKey);
+
+    return res.status(204).send();
   } catch (error) {
     return next(error);
   }
@@ -216,6 +235,7 @@ module.exports = {
   getQuiz,
   createQuiz,
   updateQuiz,
+  deleteQuiz,
   createQuestion,
   updateQuestion,
   deleteQuestion,

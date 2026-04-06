@@ -5,6 +5,7 @@ const {
   getQuiz,
   createQuiz,
   updateQuiz,
+  deleteQuiz,
   createQuestion,
   updateQuestion,
   deleteQuestion,
@@ -23,6 +24,7 @@ router.post('/', createQuiz);
 router.post('/import', upload.single('file'), importQuiz);
 router.get('/:quizId', getQuiz);
 router.put('/:quizId', updateQuiz);
+router.delete('/:quizId', deleteQuiz);
 router.get('/:quizId/export', exportQuiz);
 router.post('/:quizId/media', upload.single('file'), uploadQuizMedia);
 router.post('/:quizId/questions', createQuestion);

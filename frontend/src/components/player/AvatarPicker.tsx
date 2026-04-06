@@ -15,6 +15,21 @@ const presets = [
   'emoji:\u{1F3B2}',
   'emoji:\u{1F43B}',
   'emoji:\u{1F99A}',
+  'emoji:\u{1F981}',
+  'emoji:\u{1F436}',
+  'emoji:\u{1F431}',
+  'emoji:\u{1F98A}',
+  'emoji:\u{1F438}',
+  'emoji:\u{1F98B}',
+  'emoji:\u{1F42C}',
+  'emoji:\u{1F9A5}',
+  'emoji:\u{1F422}',
+  'emoji:\u{1F47B}',
+  'emoji:\u{1F916}',
+  'emoji:\u{1F3AF}',
+  'emoji:\u{1F3C6}',
+  'emoji:\u{1F9E9}',
+  'emoji:\u{1F4A1}',
 ]
 
 export function AvatarPicker({
@@ -55,7 +70,7 @@ export function AvatarPicker({
       </div>
       {presets.length > 6 ? (
         <button className="ghost-button avatar-toggle" onClick={() => setExpanded((current) => !current)} type="button">
-          <span>{expanded ? '^' : 'v'}</span>
+          <span aria-hidden="true" className={expanded ? 'avatar-toggle-icon expanded' : 'avatar-toggle-icon'} />
           {expanded ? t('join.lessAvatars') : t('join.moreAvatars')}
         </button>
       ) : null}

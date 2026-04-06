@@ -13,16 +13,23 @@ export function DisplaySessionPage() {
   const { t } = useI18n()
   const [session, setSession] = useState<SessionState | null>(null)
   const [error, setError] = useState('')
-  const questionSecondsLeft = useCountdown(session?.phase === 'open' ? session.closesAt : null)
-  const autoAdvanceSecondsLeft = useCountdown(session?.autoAdvanceAt ?? null)
+  const questionSecondsLeft = useCountdown(
+    session?.phase === 'open' ? session.closesAt : null,
+    session?.serverNow ?? null,
+  )
+  const autoAdvanceSecondsLeft = useCountdown(session?.autoAdvanceAt ?? null, session?.serverNow ?? null)
 
   const activeTimer =
-    session && session.currentQuestion && session.phase === 'open' && (session.answerDurationSeconds ?? session.currentQuestion.timeLimitSeconds) > 0
+    session &&
+    session.currentQuestion &&
+    session.phase === 'open' &&
+    (session.answerDurationSeconds ?? session.currentQuestion.timeLimitSeconds) > 0 &&
+    (session.closesAt || session.autoAdvancePaused)
       ? {
           label: t('play.answerTimer'),
           totalSeconds: session.answerDurationSeconds ?? session.currentQuestion.timeLimitSeconds,
-          remainingSeconds: questionSecondsLeft,
-          paused: false,
+          remainingSeconds: session.closesAt ? questionSecondsLeft : session.questionRemainingSeconds,
+          paused: session.autoAdvancePaused,
         }
       : session && session.autoAdvanceEnabled && session.status !== 'finished' && session.phase !== 'open'
         ? {
@@ -92,8 +99,7 @@ export function DisplaySessionPage() {
             <h1>{session?.title || t('common.loading')}</h1>
           </div>
           <div className="pill-row">
-            <span className="chip active">{joinCode}</span>
-            {activeTimer ? <span className="timer-pill">{Math.max(activeTimer.remainingSeconds, 0)}s</span> : null}
+            <span className="chip">{joinCode}</span>
           </div>
         </div>
 

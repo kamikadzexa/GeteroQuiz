@@ -254,6 +254,22 @@ async function createQuizExportArchive(quizId) {
   };
 }
 
+function deleteQuizStorage(storageKey) {
+  if (!storageKey) {
+    return;
+  }
+
+  ensureStorageRoots();
+  const rootDirectory = path.resolve(QUIZZES_ROOT);
+  const quizDirectory = path.resolve(getQuizDirectory(storageKey));
+
+  if (!quizDirectory.startsWith(`${rootDirectory}${path.sep}`)) {
+    return;
+  }
+
+  fs.rmSync(quizDirectory, { recursive: true, force: true });
+}
+
 function normalizeImportedMediaUrl(rawUrl, storageKey) {
   if (!rawUrl) {
     return '';
@@ -335,6 +351,7 @@ module.exports = {
   ensureAllQuizStorage,
   ensureQuizStorageKey,
   createQuizExportArchive,
+  deleteQuizStorage,
   importQuizArchive,
   loadQuizWithQuestions,
   saveUploadedQuizMedia,

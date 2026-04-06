@@ -16,6 +16,7 @@ class SessionRuntimeService {
       phase: session?.phase ?? 'waiting',
       closesAt: null,
       timer: null,
+      questionRemainingSeconds: 0,
       autoAdvanceAt: null,
       autoAdvanceTimer: null,
       autoAdvanceEnabled: true,
@@ -29,6 +30,10 @@ class SessionRuntimeService {
       buzzAttemptText: '',
       deniedBuzzPlayerIds: new Set(),
     };
+  }
+
+  getState(sessionId) {
+    return this.runtime.get(Number(sessionId)) ?? null;
   }
 
   getRoom(sessionId) {
@@ -56,14 +61,15 @@ class SessionRuntimeService {
   }
 
   async ensureState(sessionId) {
-    if (this.runtime.has(sessionId)) {
-      return this.runtime.get(sessionId);
+    const id = Number(sessionId);
+    if (this.runtime.has(id)) {
+      return this.runtime.get(id);
     }
 
-    const session = await GameSession.findByPk(sessionId);
+    const session = await GameSession.findByPk(id);
     const state = this.createRuntimeState(session);
 
-    this.runtime.set(sessionId, state);
+    this.runtime.set(id, state);
     return state;
   }
 
@@ -81,9 +87,22 @@ class SessionRuntimeService {
     }
   }
 
+  clearRuntimeState(sessionId) {
+    const numericSessionId = Number(sessionId);
+    const state = this.getState(numericSessionId);
+    if (!state) {
+      return;
+    }
+
+    this.clearTimer(state);
+    this.clearAutoAdvanceTimer(state);
+    this.runtime.delete(numericSessionId);
+  }
+
   resetQuestionTimer(state) {
     this.clearTimer(state);
     state.closesAt = null;
+    state.questionRemainingSeconds = 0;
   }
 
   resetAutoAdvanceSchedule(state, resetRemaining = true) {
@@ -101,6 +120,24 @@ class SessionRuntimeService {
     }
 
     return Math.max(0, Math.ceil((new Date(targetTime).getTime() - Date.now()) / 1000));
+  }
+
+  getQuestionTimerDurationSeconds(state, question) {
+    const sessionAnswer = Number(state?.sessionAnswerDurationSeconds ?? 0);
+    const questionAnswer = Number(question?.timeLimitSeconds ?? 0);
+    return Math.max(0, sessionAnswer > 0 ? sessionAnswer : questionAnswer);
+  }
+
+  refreshQuestionRemaining(state) {
+    if (!state) {
+      return 0;
+    }
+
+    if (state.closesAt) {
+      state.questionRemainingSeconds = this.getSecondsUntil(state.closesAt);
+    }
+
+    return state.questionRemainingSeconds;
   }
 
   refreshAutoAdvanceRemaining(state) {
@@ -140,30 +177,74 @@ class SessionRuntimeService {
     state.autoAdvanceRemainingSeconds = safeRemainingSeconds;
     state.autoAdvanceAt = new Date(Date.now() + safeRemainingSeconds * 1000).toISOString();
     state.autoAdvanceTimer = setTimeout(() => {
+      const currentState = this.getState(sessionId);
+      if (!currentState?.autoAdvanceEnabled || currentState?.autoAdvancePaused) return;
       const nextStep = action === 'finish' ? this.finishSession(sessionId) : this.advanceQuestion(sessionId);
-
       nextStep.catch((error) => {
         console.error('Failed to auto-advance session', error);
       });
     }, safeRemainingSeconds * 1000);
   }
 
-  startQuestionTimer(sessionId, question, state) {
-    this.resetQuestionTimer(state);
+  scheduleQuestionTimer(sessionId, state, remainingSeconds) {
+    this.clearTimer(state);
 
-    const sessionAnswer = Number(state.sessionAnswerDurationSeconds ?? 0);
-    const questionAnswer = Number(question?.timeLimitSeconds ?? 0);
-    const durationSeconds = Math.max(0, sessionAnswer > 0 ? sessionAnswer : questionAnswer);
-    if (durationSeconds <= 0) {
-      return;
-    }
-
-    state.closesAt = new Date(Date.now() + durationSeconds * 1000).toISOString();
+    const safeRemainingSeconds = Math.max(1, Number(remainingSeconds || 0));
+    state.questionRemainingSeconds = safeRemainingSeconds;
+    state.closesAt = new Date(Date.now() + safeRemainingSeconds * 1000).toISOString();
     state.timer = setTimeout(() => {
+      if (!this.getState(sessionId)) return;
       this.closeActiveQuestion(sessionId).catch((error) => {
         console.error('Failed to auto-close question', error);
       });
-    }, durationSeconds * 1000);
+    }, safeRemainingSeconds * 1000);
+  }
+
+  async syncQuestionTimer(sessionId, session = null, { resetCountdown = false } = {}) {
+    const state = await this.ensureState(sessionId);
+    const graph = session ?? (await this.getSessionGraph(sessionId));
+    const question = graph.quiz.questions[graph.currentQuestionIndex] ?? null;
+
+    this.refreshQuestionRemaining(state);
+
+    if (
+      !question ||
+      graph.status !== 'live' ||
+      graph.phase !== 'open' ||
+      graph.currentQuestionIndex < 0
+    ) {
+      this.resetQuestionTimer(state);
+      return;
+    }
+
+    const durationSeconds = this.getQuestionTimerDurationSeconds(state, question);
+    if (durationSeconds <= 0) {
+      this.resetQuestionTimer(state);
+      return;
+    }
+
+    if (
+      resetCountdown ||
+      !state.questionRemainingSeconds ||
+      state.questionRemainingSeconds < 1
+    ) {
+      state.questionRemainingSeconds = durationSeconds;
+    }
+
+    if (!state.autoAdvanceEnabled) {
+      this.clearTimer(state);
+      state.closesAt = null;
+      state.questionRemainingSeconds = durationSeconds;
+      return;
+    }
+
+    if (state.autoAdvancePaused) {
+      this.clearTimer(state);
+      state.closesAt = null;
+      return;
+    }
+
+    this.scheduleQuestionTimer(sessionId, state, state.questionRemainingSeconds);
   }
 
   async syncAutoAdvance(sessionId, session = null, { resetCountdown = false } = {}) {
@@ -306,7 +387,8 @@ class SessionRuntimeService {
   }
 
   buildPublicStateFromGraph(session, viewerPlayerId = null) {
-    const state = this.runtime.get(session.id) ?? this.createRuntimeState(session);
+    const state = this.getState(session.id) ?? this.createRuntimeState(session);
+    this.refreshQuestionRemaining(state);
     this.refreshAutoAdvanceRemaining(state);
     const question = session.quiz.questions[session.currentQuestionIndex] ?? null;
     const currentAnswers = question
@@ -341,7 +423,9 @@ class SessionRuntimeService {
             session.phase,
           )
         : null,
+      serverNow: new Date().toISOString(),
       closesAt: state.closesAt,
+      questionRemainingSeconds: state.questionRemainingSeconds,
       answerDurationSeconds: state.sessionAnswerDurationSeconds,
       autoAdvanceAt: state.autoAdvanceAt,
       autoAdvanceEnabled: state.autoAdvanceEnabled,
@@ -373,7 +457,7 @@ class SessionRuntimeService {
   }
 
   buildAdminStateFromGraph(session) {
-    const state = this.runtime.get(session.id) ?? this.createRuntimeState(session);
+    const state = this.getState(session.id) ?? this.createRuntimeState(session);
     const question = session.quiz.questions[session.currentQuestionIndex] ?? null;
 
     return {
@@ -585,7 +669,7 @@ class SessionRuntimeService {
     state.currentBuzzPlayerId = null;
     state.buzzAttemptText = '';
     state.deniedBuzzPlayerIds = new Set();
-    this.startQuestionTimer(sessionId, question, state);
+    await this.syncQuestionTimer(sessionId, session, { resetCountdown: true });
 
     await this.emitState(sessionId);
     return this.getSessionGraph(sessionId);
@@ -668,6 +752,7 @@ class SessionRuntimeService {
     this.clearAutoAdvanceTimer(state);
     state.phase = 'finished';
     state.closesAt = null;
+    state.questionRemainingSeconds = 0;
     state.autoAdvanceAt = null;
     state.autoAdvanceAction = null;
     state.autoAdvanceRemainingSeconds = state.autoAdvanceDurationSeconds;
@@ -956,8 +1041,15 @@ class SessionRuntimeService {
       parsedDuration !== state.autoAdvanceDurationSeconds;
 
     const parsedAnswerDuration = Number(answerDurationSeconds);
-    if (Number.isFinite(parsedAnswerDuration) && parsedAnswerDuration > 0) {
-      state.sessionAnswerDurationSeconds = Math.max(1, Math.round(parsedAnswerDuration));
+    const nextAnswerDuration = Number.isFinite(parsedAnswerDuration) && parsedAnswerDuration > 0
+      ? Math.max(1, Math.round(parsedAnswerDuration))
+      : null;
+    const hasAnswerDurationChange =
+      nextAnswerDuration != null &&
+      nextAnswerDuration !== state.sessionAnswerDurationSeconds;
+
+    if (hasAnswerDurationChange) {
+      state.sessionAnswerDurationSeconds = nextAnswerDuration;
     }
 
     if (hasDurationChange) {
@@ -985,6 +1077,9 @@ class SessionRuntimeService {
       }
     }
 
+    await this.syncQuestionTimer(sessionId, session, {
+      resetCountdown: enabled === true || hasAnswerDurationChange,
+    });
     await this.syncAutoAdvance(sessionId, session, {
       resetCountdown: enabled === true || hasDurationChange,
     });
@@ -998,12 +1093,23 @@ class SessionRuntimeService {
       throw new Error('Session not found');
     }
 
-    const state = await this.ensureState(Number(sessionId));
-    this.clearTimer(state);
-    this.clearAutoAdvanceTimer(state);
-    this.runtime.delete(Number(sessionId));
-
+    this.clearRuntimeState(sessionId);
     await session.destroy();
+  }
+
+  async deleteSessionsForQuiz(quizId) {
+    const sessions = await GameSession.findAll({
+      where: { quizId },
+      attributes: ['id'],
+    });
+
+    for (const session of sessions) {
+      this.clearRuntimeState(session.id);
+    }
+
+    await GameSession.destroy({
+      where: { quizId },
+    });
   }
 
   async getSessionByJoinCode(joinCode, viewerPlayerId = null) {
