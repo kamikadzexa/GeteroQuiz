@@ -68,3 +68,16 @@ Options:
 Correct answer: A
 Media type: video
 Media: /quiz-data/0003-test/media/1775507678029-YTDown-com_YouTube_SFM-WHAT-THE-FUCK-IS-A-KILOMETER_Media_Y-3IV11_ZgA_001_1080p.mp4
+
+Question 5
+Prompt: New question
+Type: multiple_choice
+Timer: 20s
+Points: 100
+Penalty: 50
+Options:
+- A: Option A
+- B: Option B
+- C: Option C
+- D: Option D
+Correct answer: A

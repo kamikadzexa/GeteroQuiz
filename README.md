@@ -148,6 +148,7 @@ ADMIN_USERNAME=admin
 ADMIN_PASSWORD=replace-me
 ADMIN_DISPLAY_NAME=Quiz Host
 CORS_ORIGIN=https://your-domain.example
+MAX_UPLOAD_SIZE_MB=25
 ```
 
 ### 4. Run backend with PM2
@@ -167,6 +168,7 @@ Example Nginx site config:
 server {
     listen 80;
     server_name your-domain.example;
+    client_max_body_size 25M;
 
     root /var/www/getero-quiz/frontend/dist;
     index index.html;
@@ -206,6 +208,8 @@ sudo ln -s /etc/nginx/sites-available/getero-quiz /etc/nginx/sites-enabled/geter
 sudo nginx -t
 sudo systemctl reload nginx
 ```
+
+If uploads larger than 1 MB fail on Ubuntu, double-check the `client_max_body_size` value in your active Nginx site config and reload Nginx after changing it.
 
 ## Notes
 

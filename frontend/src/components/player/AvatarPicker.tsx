@@ -41,6 +41,7 @@ export function AvatarPicker({
 }) {
   const { t } = useI18n()
   const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null)
   const [expanded, setExpanded] = useState(false)
 
   const visiblePresets = useMemo(() => {
@@ -82,11 +83,13 @@ export function AvatarPicker({
             if (!file) return
 
             setUploading(true)
+            setUploadProgress(0)
             try {
-              const result = await api.uploadAvatar(file)
+              const result = await api.uploadAvatar(file, setUploadProgress)
               onChange(result.url)
             } finally {
               setUploading(false)
+              setUploadProgress(null)
               event.currentTarget.value = ''
             }
           }}
@@ -94,6 +97,12 @@ export function AvatarPicker({
         />
         {uploading ? t('common.loading') : t('join.uploadImage')}
       </label>
+      {uploadProgress !== null ? (
+        <div className="upload-progress" role="progressbar" aria-valuemax={100} aria-valuemin={0} aria-valuenow={uploadProgress}>
+          <div className="upload-progress-fill" style={{ width: `${uploadProgress}%` }} />
+          <span>{uploadProgress}%</span>
+        </div>
+      ) : null}
       <div className="avatar-preview">
         {value.startsWith('emoji:') ? (
           <span className="avatar-large">{value.replace('emoji:', '')}</span>

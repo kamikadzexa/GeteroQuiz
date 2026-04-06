@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exportedAt": "2026-04-06T20:58:36.045Z",
+  "exportedAt": "2026-04-06T21:32:09.804Z",
   "storageKey": "0003-test",
   "quiz": {
     "title": "ARE YOU SURE?",
@@ -125,6 +125,36 @@
         "correctAnswer": "A",
         "mediaType": "video",
         "mediaUrl": "/quiz-data/0003-test/media/1775507678029-YTDown-com_YouTube_SFM-WHAT-THE-FUCK-IS-A-KILOMETER_Media_Y-3IV11_ZgA_001_1080p.mp4",
+        "timeLimitSeconds": 20,
+        "points": 100,
+        "penaltyPoints": 50
+      },
+      {
+        "prompt": "New question",
+        "helpText": "",
+        "type": "multiple_choice",
+        "order": 4,
+        "options": [
+          {
+            "id": "A",
+            "text": "Option A"
+          },
+          {
+            "id": "B",
+            "text": "Option B"
+          },
+          {
+            "id": "C",
+            "text": "Option C"
+          },
+          {
+            "id": "D",
+            "text": "Option D"
+          }
+        ],
+        "correctAnswer": "A",
+        "mediaType": "none",
+        "mediaUrl": "",
         "timeLimitSeconds": 20,
         "points": 100,
         "penaltyPoints": 50

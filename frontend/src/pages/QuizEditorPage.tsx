@@ -28,6 +28,8 @@ export function QuizEditorPage() {
   const [quiz, setQuiz] = useState<QuizDetail | null>(null)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [importProgress, setImportProgress] = useState<number | null>(null)
+  const [mediaUploadProgress, setMediaUploadProgress] = useState<Record<number, number>>({})
   const importInputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
@@ -146,13 +148,15 @@ export function QuizEditorPage() {
 
             setSaving(true)
             setError('')
+            setImportProgress(0)
             try {
-              const importedQuiz = await api.importQuiz(token, file)
+              const importedQuiz = await api.importQuiz(token, file, setImportProgress)
               navigate(`/admin/quizzes/${importedQuiz.id}`)
             } catch (importError) {
               setError(importError instanceof Error ? importError.message : 'Could not import quiz')
             } finally {
               event.currentTarget.value = ''
+              setImportProgress(null)
               setSaving(false)
             }
           }}
@@ -204,6 +208,13 @@ export function QuizEditorPage() {
           {t('editor.importQuiz')}
         </button>
       </div>
+
+      {importProgress !== null ? (
+        <div className="upload-progress" role="progressbar" aria-valuemax={100} aria-valuemin={0} aria-valuenow={importProgress}>
+          <div className="upload-progress-fill" style={{ width: `${importProgress}%` }} />
+          <span>{importProgress}%</span>
+        </div>
+      ) : null}
 
       {error ? <p className="error-text">{error}</p> : null}
 
@@ -398,17 +409,45 @@ export function QuizEditorPage() {
                       const file = event.target.files?.[0]
                       if (!file) return
 
-                      const upload = await api.uploadQuizMedia(token, quiz.id, file)
-                      setQuiz({
-                        ...quiz,
-                        questions: quiz.questions.map((item) =>
-                          item.id === question.id ? { ...item, mediaUrl: upload.url } : item,
-                        ),
-                      })
-                      event.currentTarget.value = ''
+                      setError('')
+                      setMediaUploadProgress((current) => ({ ...current, [question.id]: 0 }))
+
+                      try {
+                        const upload = await api.uploadQuizMedia(token, quiz.id, file, (progress) => {
+                          setMediaUploadProgress((current) => ({ ...current, [question.id]: progress }))
+                        })
+
+                        setQuiz({
+                          ...quiz,
+                          questions: quiz.questions.map((item) =>
+                            item.id === question.id ? { ...item, mediaUrl: upload.url } : item,
+                          ),
+                        })
+                      } catch (uploadError) {
+                        setError(uploadError instanceof Error ? uploadError.message : 'Media upload failed')
+                      } finally {
+                        setMediaUploadProgress((current) => {
+                          const next = { ...current }
+                          delete next[question.id]
+                          return next
+                        })
+                        event.currentTarget.value = ''
+                      }
                     }}
                     type="file"
                   />
+                  {typeof mediaUploadProgress[question.id] === 'number' ? (
+                    <div
+                      className="upload-progress"
+                      role="progressbar"
+                      aria-valuemax={100}
+                      aria-valuemin={0}
+                      aria-valuenow={mediaUploadProgress[question.id]}
+                    >
+                      <div className="upload-progress-fill" style={{ width: `${mediaUploadProgress[question.id]}%` }} />
+                      <span>{mediaUploadProgress[question.id]}%</span>
+                    </div>
+                  ) : null}
                 </div>
               </label>
             </div>

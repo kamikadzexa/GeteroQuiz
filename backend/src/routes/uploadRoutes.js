@@ -2,7 +2,9 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const { uploadFile } = require('../controllers/uploadController');
+const { getMaxUploadSizeBytes } = require('../config/uploadConfig');
 const { requireAdmin } = require('../middleware/auth');
+const { uploadLimitHandler } = require('../middleware/uploadLimit');
 
 const storage = multer.diskStorage({
   destination: (_req, _file, callback) => {
@@ -15,10 +17,16 @@ const storage = multer.diskStorage({
   },
 });
 
-const upload = multer({ storage });
+const upload = multer({
+  storage,
+  limits: {
+    fileSize: getMaxUploadSizeBytes(),
+  },
+});
 const router = express.Router();
 
 router.post('/avatar', upload.single('file'), uploadFile);
 router.post('/media', requireAdmin, upload.single('file'), uploadFile);
+router.use(uploadLimitHandler);
 
 module.exports = router;

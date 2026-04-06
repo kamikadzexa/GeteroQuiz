@@ -17,6 +17,7 @@ const quizRoutes = require('./routes/quizRoutes');
 const sessionRoutes = require('./routes/sessionRoutes');
 const uploadRoutes = require('./routes/uploadRoutes');
 const userRoutes = require('./routes/userRoutes');
+const { getMaxUploadSizeMb } = require('./config/uploadConfig');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 
 async function ensureQuizStorageColumn() {
@@ -86,6 +87,7 @@ async function startServer() {
   const port = Number(process.env.PORT || 4000);
   server.listen(port, () => {
     console.log(`Quiz backend listening on http://localhost:${port}`);
+    console.log(`Maximum upload size: ${getMaxUploadSizeMb()} MB`);
     console.log('Register the first account in /admin to create the primary admin.');
   });
 }

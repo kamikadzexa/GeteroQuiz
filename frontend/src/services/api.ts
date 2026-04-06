@@ -12,6 +12,11 @@ import type {
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api'
 
+type UploadOptions = {
+  token?: string
+  onProgress?: (progress: number) => void
+}
+
 function normalizePlayerRecord(player: Partial<PlayerRecord> & { id?: number; playerId?: number }): PlayerRecord {
   return {
     ...player,
@@ -45,6 +50,48 @@ async function request<T>(path: string, init?: RequestInit, token?: string): Pro
   }
 
   return (await response.json()) as T
+}
+
+function upload<T>(path: string, file: File, options: UploadOptions = {}) {
+  const { token, onProgress } = options
+
+  return new Promise<T>((resolve, reject) => {
+    const formData = new FormData()
+    formData.append('file', file)
+
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', `${API_BASE}${path}`)
+    xhr.responseType = 'text'
+
+    if (token) {
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+    }
+
+    xhr.upload.onprogress = (event) => {
+      if (!event.lengthComputable) return
+      onProgress?.(Math.round((event.loaded / event.total) * 100))
+    }
+
+    xhr.onerror = () => {
+      reject(new Error('Upload failed'))
+    }
+
+    xhr.onload = () => {
+      const payload = xhr.responseText
+        ? (JSON.parse(xhr.responseText) as { message?: string })
+        : null
+
+      if (xhr.status < 200 || xhr.status >= 300) {
+        reject(new Error(payload?.message || 'Upload failed'))
+        return
+      }
+
+      onProgress?.(100)
+      resolve(payload as T)
+    }
+
+    xhr.send(formData)
+  })
 }
 
 export function assetUrl(path: string) {
@@ -111,25 +158,8 @@ export const api = {
       filename: filenameMatch?.[1] || `quiz-${quizId}.zip`,
     }
   },
-  importQuiz: async (token: string, file: File) => {
-    const formData = new FormData()
-    formData.append('file', file)
-
-    const response = await fetch(`${API_BASE}/quizzes/import`, {
-      method: 'POST',
-      body: formData,
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    })
-
-    if (!response.ok) {
-      const payload = (await response.json().catch(() => null)) as { message?: string } | null
-      throw new Error(payload?.message || 'Quiz import failed')
-    }
-
-    return (await response.json()) as QuizDetail
-  },
+  importQuiz: (token: string, file: File, onProgress?: (progress: number) => void) =>
+    upload<QuizDetail>('/quizzes/import', file, { token, onProgress }),
   createQuestion: (token: string, quizId: string | number, payload: Partial<QuizDetail['questions'][number]>) =>
     request(
       `/quizzes/${quizId}/questions`,
@@ -215,37 +245,8 @@ export const api = {
     request(`/sessions/${sessionId}/players/${playerId}`, { method: 'DELETE' }, token),
   deleteSession: (token: string, sessionId: number) =>
     request(`/sessions/${sessionId}`, { method: 'DELETE' }, token),
-  uploadAvatar: async (file: File) => {
-    const formData = new FormData()
-    formData.append('file', file)
-
-    const response = await fetch(`${API_BASE}/uploads/avatar`, {
-      method: 'POST',
-      body: formData,
-    })
-
-    if (!response.ok) {
-      throw new Error('Avatar upload failed')
-    }
-
-    return (await response.json()) as { url: string }
-  },
-  uploadQuizMedia: async (token: string, quizId: string | number, file: File) => {
-    const formData = new FormData()
-    formData.append('file', file)
-
-    const response = await fetch(`${API_BASE}/quizzes/${quizId}/media`, {
-      method: 'POST',
-      body: formData,
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    })
-
-    if (!response.ok) {
-      throw new Error('Media upload failed')
-    }
-
-    return (await response.json()) as { url: string }
-  },
+  uploadAvatar: (file: File, onProgress?: (progress: number) => void) =>
+    upload<{ url: string }>('/uploads/avatar', file, { onProgress }),
+  uploadQuizMedia: (token: string, quizId: string | number, file: File, onProgress?: (progress: number) => void) =>
+    upload<{ url: string }>(`/quizzes/${quizId}/media`, file, { token, onProgress }),
 }
