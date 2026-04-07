@@ -164,6 +164,7 @@ function buildQuizManifest(quiz, storageKey) {
       mode: quiz.mode,
       accentColor: quiz.accentColor,
       isPublished: quiz.isPublished,
+      editorPinHash: quiz.editorPinHash || null,
       questions: quiz.questions.map((question) => ({
         prompt: question.prompt,
         helpText: question.helpText,
@@ -328,6 +329,7 @@ async function importQuizArchive(buffer) {
     mode: sourceQuiz.mode || 'classic',
     accentColor: sourceQuiz.accentColor || '#ff6b6b',
     isPublished: sourceQuiz.isPublished ?? true,
+    editorPinHash: sourceQuiz.editorPinHash || null,
   });
 
   const storageKey = await ensureQuizStorageKey(createdQuiz);

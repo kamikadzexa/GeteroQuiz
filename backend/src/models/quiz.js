@@ -26,6 +26,10 @@ module.exports = (sequelize, DataTypes) =>
         allowNull: false,
         defaultValue: true,
       },
+      editorPinHash: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
       storageKey: {
         type: DataTypes.STRING,
         allowNull: true,

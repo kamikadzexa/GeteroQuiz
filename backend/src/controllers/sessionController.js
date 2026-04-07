@@ -1,4 +1,5 @@
 const { GameSession, Player, Quiz } = require('../models');
+const { getQuizForRequest, getSessionQuizForRequest, quizHasEditorPin } = require('../services/quizAccessService');
 
 async function listSessions(_req, res, next) {
   try {
@@ -26,6 +27,7 @@ async function listSessions(_req, res, next) {
           title: session.quiz.title,
           mode: session.quiz.mode,
           accentColor: session.quiz.accentColor,
+          hasEditorPin: quizHasEditorPin(session.quiz),
         },
       })),
     );
@@ -45,6 +47,7 @@ async function listPublicSessions(req, res, next) {
 
 async function createSession(req, res, next) {
   try {
+    await getQuizForRequest(req, req.body.quizId);
     const session = await req.app.locals.runtimeService.createSession(req.body.quizId);
     return res.status(201).json({
       id: session.id,
@@ -76,6 +79,7 @@ async function getPublicSession(req, res, next) {
 
 async function getAdminSession(req, res, next) {
   try {
+    await getSessionQuizForRequest(req, req.params.sessionId);
     const state = await req.app.locals.runtimeService.getAdminSession(req.params.sessionId);
     return res.json(state);
   } catch (error) {
@@ -137,6 +141,7 @@ async function rejoinSession(req, res, next) {
 
 async function advanceSession(req, res, next) {
   try {
+    await getSessionQuizForRequest(req, req.params.sessionId);
     const session = await req.app.locals.runtimeService.advanceQuestion(req.params.sessionId);
     return res.json({
       id: session.id,
@@ -151,6 +156,7 @@ async function advanceSession(req, res, next) {
 
 async function closeQuestion(req, res, next) {
   try {
+    await getSessionQuizForRequest(req, req.params.sessionId);
     const session = await req.app.locals.runtimeService.closeActiveQuestion(req.params.sessionId);
     return res.json({
       id: session.id,
@@ -165,6 +171,7 @@ async function closeQuestion(req, res, next) {
 
 async function finishSession(req, res, next) {
   try {
+    await getSessionQuizForRequest(req, req.params.sessionId);
     const session = await req.app.locals.runtimeService.finishSession(req.params.sessionId);
     return res.json({
       id: session.id,
@@ -179,6 +186,7 @@ async function finishSession(req, res, next) {
 
 async function replayQuestion(req, res, next) {
   try {
+    await getSessionQuizForRequest(req, req.params.sessionId);
     const session = await req.app.locals.runtimeService.replayQuestion(req.params.sessionId);
     return res.json({
       id: session.id,
@@ -193,6 +201,7 @@ async function replayQuestion(req, res, next) {
 
 async function judgeAnswer(req, res, next) {
   try {
+    await getSessionQuizForRequest(req, req.params.sessionId);
     const answer = await req.app.locals.runtimeService.judgeAnswer({
       answerId: req.params.answerId,
       isCorrect: Boolean(req.body.isCorrect),
@@ -206,6 +215,7 @@ async function judgeAnswer(req, res, next) {
 
 async function judgeBuzz(req, res, next) {
   try {
+    await getSessionQuizForRequest(req, req.params.sessionId);
     const answer = await req.app.locals.runtimeService.judgeBuzz({
       sessionId: req.params.sessionId,
       isCorrect: Boolean(req.body.isCorrect),
@@ -219,6 +229,7 @@ async function judgeBuzz(req, res, next) {
 
 async function assistPlayer(req, res, next) {
   try {
+    await getSessionQuizForRequest(req, req.params.sessionId);
     const state = await req.app.locals.runtimeService.getAdminSession(req.params.sessionId);
     const player = state.players.find((item) => item.id === Number(req.params.playerId));
 
@@ -234,6 +245,7 @@ async function assistPlayer(req, res, next) {
 
 async function kickPlayer(req, res, next) {
   try {
+    await getSessionQuizForRequest(req, req.params.sessionId);
     await req.app.locals.runtimeService.kickPlayer(req.params.sessionId, req.params.playerId);
     return res.status(204).send();
   } catch (error) {
@@ -243,6 +255,7 @@ async function kickPlayer(req, res, next) {
 
 async function updateAutoAdvance(req, res, next) {
   try {
+    await getSessionQuizForRequest(req, req.params.sessionId);
     const state = await req.app.locals.runtimeService.updateAutoAdvance(req.params.sessionId, {
       enabled: req.body.enabled,
       paused: req.body.paused,
@@ -257,6 +270,7 @@ async function updateAutoAdvance(req, res, next) {
 
 async function deleteSession(req, res, next) {
   try {
+    await getSessionQuizForRequest(req, req.params.sessionId);
     await req.app.locals.runtimeService.deleteSession(req.params.sessionId);
     return res.status(204).send();
   } catch (error) {

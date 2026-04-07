@@ -17,6 +17,11 @@ const MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024
 type UploadOptions = {
   token?: string
   onProgress?: (progress: number) => void
+  quizPin?: string
+}
+
+type RequestOptions = RequestInit & {
+  quizPin?: string
 }
 
 export function getUploadSizeError(file: File) {
@@ -40,12 +45,13 @@ function normalizePlayerRecord(player: Partial<PlayerRecord> & { id?: number; pl
   }
 }
 
-async function request<T>(path: string, init?: RequestInit, token?: string): Promise<T> {
+async function request<T>(path: string, init?: RequestOptions, token?: string): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(init?.quizPin ? { 'X-Quiz-Pin': init.quizPin } : {}),
       ...init?.headers,
     },
   })
@@ -63,7 +69,7 @@ async function request<T>(path: string, init?: RequestInit, token?: string): Pro
 }
 
 function upload<T>(path: string, file: File, options: UploadOptions = {}) {
-  const { token, onProgress } = options
+  const { token, onProgress, quizPin } = options
 
   return new Promise<T>((resolve, reject) => {
     const formData = new FormData()
@@ -75,6 +81,9 @@ function upload<T>(path: string, file: File, options: UploadOptions = {}) {
 
     if (token) {
       xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+    }
+    if (quizPin) {
+      xhr.setRequestHeader('X-Quiz-Pin', quizPin)
     }
 
     xhr.upload.onprogress = (event) => {
@@ -121,6 +130,45 @@ export function assetUrl(path: string) {
   return new URL(path, window.location.origin).toString()
 }
 
+const quizPinStorageKey = (quizId: string | number) => `quiz-editor-pin:${quizId}`
+const sessionPinStorageKey = (sessionId: string | number) => `session-editor-pin:${sessionId}`
+
+export function getStoredQuizPin(quizId: string | number) {
+  return localStorage.getItem(quizPinStorageKey(quizId)) || ''
+}
+
+export function setStoredQuizPin(quizId: string | number, quizPin: string) {
+  const normalized = quizPin.trim()
+  if (!normalized) {
+    localStorage.removeItem(quizPinStorageKey(quizId))
+    return
+  }
+
+  localStorage.setItem(quizPinStorageKey(quizId), normalized)
+}
+
+export function clearStoredQuizPin(quizId: string | number) {
+  localStorage.removeItem(quizPinStorageKey(quizId))
+}
+
+export function getStoredSessionPin(sessionId: string | number) {
+  return localStorage.getItem(sessionPinStorageKey(sessionId)) || ''
+}
+
+export function setStoredSessionPin(sessionId: string | number, quizPin: string) {
+  const normalized = quizPin.trim()
+  if (!normalized) {
+    localStorage.removeItem(sessionPinStorageKey(sessionId))
+    return
+  }
+
+  localStorage.setItem(sessionPinStorageKey(sessionId), normalized)
+}
+
+export function clearStoredSessionPin(sessionId: string | number) {
+  localStorage.removeItem(sessionPinStorageKey(sessionId))
+}
+
 export const api = {
   login: (username: string, password: string) =>
     request<{ token: string; user: AdminUser }>('/auth/login', {
@@ -140,34 +188,37 @@ export const api = {
     payload: Partial<Pick<AdminUser, 'username' | 'displayName' | 'role' | 'status'>> & { password?: string },
   ) => request<AdminUser>(`/users/${userId}`, { method: 'PUT', body: JSON.stringify(payload) }, token),
   listQuizzes: (token: string) => request<QuizSummary[]>('/quizzes', undefined, token),
-  getQuiz: (token: string, quizId: string) => request<QuizDetail>(`/quizzes/${quizId}`, undefined, token),
-  createQuiz: (token: string, payload: Partial<QuizDetail>) =>
+  getQuiz: (token: string, quizId: string, quizPin?: string) =>
+    request<QuizDetail>(`/quizzes/${quizId}`, { quizPin }, token),
+  createQuiz: (token: string, payload: Partial<QuizDetail> & { editorPin?: string }) =>
     request<QuizDetail>(
       '/quizzes',
       { method: 'POST', body: JSON.stringify(payload) },
       token,
     ),
-  updateQuiz: (token: string, quizId: string | number, payload: Partial<QuizDetail>) =>
+  updateQuiz: (token: string, quizId: string | number, payload: Partial<QuizDetail> & { editorPin?: string }, quizPin?: string) =>
     request<QuizDetail>(
       `/quizzes/${quizId}`,
-      { method: 'PUT', body: JSON.stringify(payload) },
+      { method: 'PUT', body: JSON.stringify(payload), quizPin },
       token,
     ),
-  deleteQuiz: (token: string, quizId: string | number) =>
+  deleteQuiz: (token: string, quizId: string | number, quizPin?: string) =>
     request(
       `/quizzes/${quizId}`,
-      { method: 'DELETE' },
+      { method: 'DELETE', quizPin },
       token,
     ),
-  exportQuiz: async (token: string, quizId: string | number) => {
+  exportQuiz: async (token: string, quizId: string | number, quizPin?: string) => {
     const response = await fetch(`${API_BASE}/quizzes/${quizId}/export`, {
       headers: {
         Authorization: `Bearer ${token}`,
+        ...(quizPin ? { 'X-Quiz-Pin': quizPin } : {}),
       },
     })
 
     if (!response.ok) {
-      throw new Error('Quiz export failed')
+      const payload = (await response.json().catch(() => null)) as { message?: string } | null
+      throw new Error(payload?.message || 'Quiz export failed')
     }
 
     const blob = await response.blob()
@@ -181,10 +232,15 @@ export const api = {
   },
   importQuiz: (token: string, file: File, onProgress?: (progress: number) => void) =>
     upload<QuizDetail>('/quizzes/import', file, { token, onProgress }),
-  createQuestion: (token: string, quizId: string | number, payload: Partial<QuizDetail['questions'][number]>) =>
+  createQuestion: (
+    token: string,
+    quizId: string | number,
+    payload: Partial<QuizDetail['questions'][number]>,
+    quizPin?: string,
+  ) =>
     request(
       `/quizzes/${quizId}/questions`,
-      { method: 'POST', body: JSON.stringify(payload) },
+      { method: 'POST', body: JSON.stringify(payload), quizPin },
       token,
     ),
   updateQuestion: (
@@ -192,28 +248,29 @@ export const api = {
     quizId: string | number,
     questionId: string | number,
     payload: Partial<QuizDetail['questions'][number]>,
+    quizPin?: string,
   ) =>
     request(
       `/quizzes/${quizId}/questions/${questionId}`,
-      { method: 'PUT', body: JSON.stringify(payload) },
+      { method: 'PUT', body: JSON.stringify(payload), quizPin },
       token,
     ),
-  deleteQuestion: (token: string, quizId: string | number, questionId: string | number) =>
+  deleteQuestion: (token: string, quizId: string | number, questionId: string | number, quizPin?: string) =>
     request(
       `/quizzes/${quizId}/questions/${questionId}`,
-      { method: 'DELETE' },
+      { method: 'DELETE', quizPin },
       token,
     ),
   listSessions: (token: string) => request<SessionSummary[]>('/sessions/admin', undefined, token),
   listPublicSessions: () => request<PublicSessionSummary[]>('/sessions/public-active'),
-  createSession: (token: string, quizId: number) =>
+  createSession: (token: string, quizId: number, quizPin?: string) =>
     request<{ id: number; joinCode: string }>(
       '/sessions',
-      { method: 'POST', body: JSON.stringify({ quizId }) },
+      { method: 'POST', body: JSON.stringify({ quizId }), quizPin },
       token,
     ),
-  getAdminSession: (token: string, sessionId: string | number) =>
-    request<AdminSessionState>(`/sessions/${sessionId}/admin`, undefined, token),
+  getAdminSession: (token: string, sessionId: string | number, quizPin?: string) =>
+    request<AdminSessionState>(`/sessions/${sessionId}/admin`, { quizPin }, token),
   getPublicSession: (joinCode: string, playerId?: number) =>
     request<SessionState>(
       `/sessions/by-code/${joinCode.toUpperCase()}${playerId ? `?playerId=${playerId}` : ''}`,
@@ -237,37 +294,44 @@ export const api = {
       ...result,
       player: normalizePlayerRecord(result.player),
     })),
-  advanceSession: (token: string, sessionId: number) =>
-    request(`/sessions/${sessionId}/advance`, { method: 'POST' }, token),
-  closeQuestion: (token: string, sessionId: number) =>
-    request(`/sessions/${sessionId}/close`, { method: 'POST' }, token),
-  finishSession: (token: string, sessionId: number) =>
-    request(`/sessions/${sessionId}/finish`, { method: 'POST' }, token),
-  replayQuestion: (token: string, sessionId: number) =>
-    request(`/sessions/${sessionId}/replay`, { method: 'POST' }, token),
+  advanceSession: (token: string, sessionId: number, quizPin?: string) =>
+    request(`/sessions/${sessionId}/advance`, { method: 'POST', quizPin }, token),
+  closeQuestion: (token: string, sessionId: number, quizPin?: string) =>
+    request(`/sessions/${sessionId}/close`, { method: 'POST', quizPin }, token),
+  finishSession: (token: string, sessionId: number, quizPin?: string) =>
+    request(`/sessions/${sessionId}/finish`, { method: 'POST', quizPin }, token),
+  replayQuestion: (token: string, sessionId: number, quizPin?: string) =>
+    request(`/sessions/${sessionId}/replay`, { method: 'POST', quizPin }, token),
   updateAutoAdvance: (
     token: string,
     sessionId: number,
     payload: { enabled?: boolean; paused?: boolean; durationSeconds?: number; answerDurationSeconds?: number },
-  ) => request<AdminSessionState>(`/sessions/${sessionId}/auto-advance`, { method: 'POST', body: JSON.stringify(payload) }, token),
-  judgeAnswer: (token: string, sessionId: number, answerId: number, isCorrect: boolean) =>
+    quizPin?: string,
+  ) => request<AdminSessionState>(`/sessions/${sessionId}/auto-advance`, { method: 'POST', body: JSON.stringify(payload), quizPin }, token),
+  judgeAnswer: (token: string, sessionId: number, answerId: number, isCorrect: boolean, quizPin?: string) =>
     request(
       `/sessions/${sessionId}/answers/${answerId}/judge`,
-      { method: 'POST', body: JSON.stringify({ isCorrect }) },
+      { method: 'POST', body: JSON.stringify({ isCorrect }), quizPin },
       token,
     ),
-  judgeBuzz: (token: string, sessionId: number, isCorrect: boolean) =>
+  judgeBuzz: (token: string, sessionId: number, isCorrect: boolean, quizPin?: string) =>
     request(
       `/sessions/${sessionId}/buzz/judge`,
-      { method: 'POST', body: JSON.stringify({ isCorrect }) },
+      { method: 'POST', body: JSON.stringify({ isCorrect }), quizPin },
       token,
     ),
-  kickPlayer: (token: string, sessionId: number, playerId: number) =>
-    request(`/sessions/${sessionId}/players/${playerId}`, { method: 'DELETE' }, token),
-  deleteSession: (token: string, sessionId: number) =>
-    request(`/sessions/${sessionId}`, { method: 'DELETE' }, token),
+  kickPlayer: (token: string, sessionId: number, playerId: number, quizPin?: string) =>
+    request(`/sessions/${sessionId}/players/${playerId}`, { method: 'DELETE', quizPin }, token),
+  deleteSession: (token: string, sessionId: number, quizPin?: string) =>
+    request(`/sessions/${sessionId}`, { method: 'DELETE', quizPin }, token),
   uploadAvatar: (file: File, onProgress?: (progress: number) => void) =>
     upload<{ url: string }>('/uploads/avatar', file, { onProgress }),
-  uploadQuizMedia: (token: string, quizId: string | number, file: File, onProgress?: (progress: number) => void) =>
-    upload<{ url: string }>(`/quizzes/${quizId}/media`, file, { token, onProgress }),
+  uploadQuizMedia: (
+    token: string,
+    quizId: string | number,
+    file: File,
+    onProgress?: (progress: number) => void,
+    quizPin?: string,
+  ) =>
+    upload<{ url: string }>(`/quizzes/${quizId}/media`, file, { token, onProgress, quizPin }),
 }

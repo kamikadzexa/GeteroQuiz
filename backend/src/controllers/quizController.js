@@ -6,6 +6,26 @@ const {
   syncQuizStorage,
 } = require('../services/quizStorageService');
 const { Quiz, Question } = require('../models');
+const {
+  buildEditorPinHash,
+  getQuizForRequest,
+  quizHasEditorPin,
+} = require('../services/quizAccessService');
+
+function serializeQuizDetail(quiz) {
+  return {
+    id: quiz.id,
+    title: quiz.title,
+    description: quiz.description,
+    mode: quiz.mode,
+    accentColor: quiz.accentColor,
+    isPublished: quiz.isPublished,
+    hasEditorPin: quizHasEditorPin(quiz),
+    questions: quiz.questions,
+    createdAt: quiz.createdAt,
+    updatedAt: quiz.updatedAt,
+  };
+}
 
 async function listQuizzes(_req, res, next) {
   try {
@@ -19,12 +39,13 @@ async function listQuizzes(_req, res, next) {
             id: hydratedQuiz.id,
             title: hydratedQuiz.title,
             description: hydratedQuiz.description,
-            mode: hydratedQuiz.mode,
-            accentColor: hydratedQuiz.accentColor,
-            isPublished: hydratedQuiz.isPublished,
-            questionCount: hydratedQuiz.questions.length,
-            updatedAt: hydratedQuiz.updatedAt,
-          };
+          mode: hydratedQuiz.mode,
+          accentColor: hydratedQuiz.accentColor,
+          isPublished: hydratedQuiz.isPublished,
+          hasEditorPin: quizHasEditorPin(hydratedQuiz),
+          questionCount: hydratedQuiz.questions.length,
+          updatedAt: hydratedQuiz.updatedAt,
+        };
         }),
       ),
     );
@@ -41,7 +62,9 @@ async function getQuiz(req, res, next) {
       return res.status(404).json({ message: 'Quiz not found' });
     }
 
-    return res.json(quiz);
+    await getQuizForRequest(req, quiz.id);
+
+    return res.json(serializeQuizDetail(quiz));
   } catch (error) {
     return next(error);
   }
@@ -55,10 +78,11 @@ async function createQuiz(req, res, next) {
       mode: req.body.mode || 'classic',
       accentColor: req.body.accentColor || '#ff6b6b',
       isPublished: req.body.isPublished ?? true,
+      editorPinHash: await buildEditorPinHash(req.body.editorPin),
     });
 
     const createdQuiz = await syncQuizStorage(quiz.id);
-    return res.status(201).json(createdQuiz);
+    return res.status(201).json(serializeQuizDetail(createdQuiz));
   } catch (error) {
     return next(error);
   }
@@ -66,10 +90,9 @@ async function createQuiz(req, res, next) {
 
 async function updateQuiz(req, res, next) {
   try {
-    const quiz = await Quiz.findByPk(req.params.quizId);
-    if (!quiz) {
-      return res.status(404).json({ message: 'Quiz not found' });
-    }
+    const quiz = await getQuizForRequest(req, req.params.quizId);
+
+    const editorPinHash = await buildEditorPinHash(req.body.editorPin);
 
     await quiz.update({
       title: req.body.title ?? quiz.title,
@@ -77,6 +100,7 @@ async function updateQuiz(req, res, next) {
       mode: req.body.mode ?? quiz.mode,
       accentColor: req.body.accentColor ?? quiz.accentColor,
       isPublished: req.body.isPublished ?? quiz.isPublished,
+      ...(editorPinHash !== undefined ? { editorPinHash } : {}),
     });
 
     const updatedQuiz = await syncQuizStorage(req.params.quizId);
@@ -85,7 +109,7 @@ async function updateQuiz(req, res, next) {
       return res.status(404).json({ message: 'Quiz not found' });
     }
 
-    return res.json(updatedQuiz);
+    return res.json(serializeQuizDetail(updatedQuiz));
   } catch (error) {
     return next(error);
   }
@@ -93,10 +117,7 @@ async function updateQuiz(req, res, next) {
 
 async function deleteQuiz(req, res, next) {
   try {
-    const quiz = await Quiz.findByPk(req.params.quizId);
-    if (!quiz) {
-      return res.status(404).json({ message: 'Quiz not found' });
-    }
+    const quiz = await getQuizForRequest(req, req.params.quizId);
 
     await req.app.locals.runtimeService.deleteSessionsForQuiz(quiz.id);
     const { storageKey } = quiz;
@@ -111,10 +132,7 @@ async function deleteQuiz(req, res, next) {
 
 async function createQuestion(req, res, next) {
   try {
-    const quiz = await Quiz.findByPk(req.params.quizId);
-    if (!quiz) {
-      return res.status(404).json({ message: 'Quiz not found' });
-    }
+    const quiz = await getQuizForRequest(req, req.params.quizId);
 
     const question = await Question.create({
       quizId: quiz.id,
@@ -145,6 +163,8 @@ async function updateQuestion(req, res, next) {
       return res.status(404).json({ message: 'Question not found' });
     }
 
+    await getQuizForRequest(req, question.quizId);
+
     await question.update({
       prompt: req.body.prompt ?? question.prompt,
       helpText: req.body.helpText ?? question.helpText,
@@ -173,6 +193,8 @@ async function deleteQuestion(req, res, next) {
       return res.status(404).json({ message: 'Question not found' });
     }
 
+    await getQuizForRequest(req, question.quizId);
+
     const quizId = question.quizId;
     await question.destroy();
     await syncQuizStorage(quizId);
@@ -184,6 +206,8 @@ async function deleteQuestion(req, res, next) {
 
 async function uploadQuizMedia(req, res, next) {
   try {
+    await getQuizForRequest(req, req.params.quizId);
+
     if (!req.file) {
       return res.status(400).json({ message: 'No file was uploaded' });
     }
@@ -204,6 +228,7 @@ async function uploadQuizMedia(req, res, next) {
 
 async function exportQuiz(req, res, next) {
   try {
+    await getQuizForRequest(req, req.params.quizId);
     const archive = await createQuizExportArchive(req.params.quizId);
     if (!archive) {
       return res.status(404).json({ message: 'Quiz not found' });

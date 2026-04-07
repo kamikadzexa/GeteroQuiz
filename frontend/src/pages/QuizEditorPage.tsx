@@ -4,8 +4,9 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { QuestionMedia } from '../components/shared/QuestionMedia'
 import { useAuth } from '../context/AuthContext'
 import { useI18n } from '../context/I18nContext'
-import { api, getUploadSizeError, MAX_UPLOAD_SIZE_MB } from '../services/api'
+import { api, getStoredQuizPin, getUploadSizeError, MAX_UPLOAD_SIZE_MB, setStoredQuizPin } from '../services/api'
 import type { MediaType, Question, QuestionOption, QuestionType, QuizDetail } from '../types'
+import { withQuizPin } from '../utils/quizPin'
 
 const ACCENT_PRESETS = ['#ff7a59', '#ff5f6d', '#ffb347', '#3fb7a1', '#2f8cff', '#6658f5', '#111827', '#f97316']
 const AUTOSAVE_DELAY_MS = 700
@@ -86,6 +87,8 @@ export function QuizEditorPage() {
   const [mediaUploadProgress, setMediaUploadProgress] = useState<Record<number, number>>({})
   const [saveState, setSaveState] = useState<SaveState>('idle')
   const [accentInput, setAccentInput] = useState('#ff7a59')
+  const [editorPinInput, setEditorPinInput] = useState('')
+  const [editorPinTouched, setEditorPinTouched] = useState(false)
   const importInputRef = useRef<HTMLInputElement | null>(null)
   const autosaveTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null)
   const autosaveInFlightRef = useRef(false)
@@ -101,18 +104,23 @@ export function QuizEditorPage() {
   useEffect(() => {
     if (!token) return
 
-    api
-      .getQuiz(token, quizId)
+    withQuizPin(
+      quizId,
+      (quizPin) => api.getQuiz(token, quizId, quizPin),
+      t('editor.pinPrompt'),
+    )
       .then((loadedQuiz) => {
         setQuiz(loadedQuiz)
         setAccentInput(loadedQuiz.accentColor)
+        setEditorPinInput('')
+        setEditorPinTouched(false)
         setError('')
         setSaveState('idle')
         quizMetaDirtyRef.current = false
         dirtyQuestionIdsRef.current.clear()
       })
       .catch((loadError) => setError(loadError instanceof Error ? loadError.message : 'Could not load quiz'))
-  }, [quizId, token])
+  }, [quizId, t, token])
 
   useEffect(() => {
     return () => {
@@ -161,13 +169,19 @@ export function QuizEditorPage() {
 
     if (saveMeta) {
       try {
+        const currentQuizPin = getStoredQuizPin(currentQuiz.id) || undefined
         await api.updateQuiz(token, currentQuiz.id, {
           title: currentQuiz.title,
           description: currentQuiz.description,
           mode: currentQuiz.mode,
           accentColor: currentQuiz.accentColor,
           isPublished: currentQuiz.isPublished,
-        })
+          ...(editorPinTouched ? { editorPin: editorPinInput } : {}),
+        }, currentQuizPin)
+        if (editorPinTouched) {
+          setStoredQuizPin(currentQuiz.id, editorPinInput || '')
+          setEditorPinTouched(false)
+        }
       } catch (saveError) {
         hasFailed = true
         quizMetaDirtyRef.current = true
@@ -180,7 +194,13 @@ export function QuizEditorPage() {
       if (!latestQuestion) continue
 
       try {
-        await api.updateQuestion(token, currentQuiz.id, questionId, sanitizeQuestion(latestQuestion))
+        await api.updateQuestion(
+          token,
+          currentQuiz.id,
+          questionId,
+          sanitizeQuestion(latestQuestion),
+          getStoredQuizPin(currentQuiz.id) || undefined,
+        )
       } catch (saveError) {
         hasFailed = true
         dirtyQuestionIdsRef.current.add(questionId)
@@ -384,7 +404,7 @@ export function QuizEditorPage() {
               setError('')
               try {
                 await flushAutosave()
-                await api.deleteQuiz(token, quiz.id)
+                await api.deleteQuiz(token, quiz.id, getStoredQuizPin(quiz.id) || undefined)
                 navigate('/admin')
               } catch (deleteError) {
                 setError(deleteError instanceof Error ? deleteError.message : 'Could not delete quiz')
@@ -437,6 +457,23 @@ export function QuizEditorPage() {
             value={quiz.description}
           />
         </label>
+
+        <label>
+          <span>{t('editor.pinLabel')}</span>
+          <input
+            onChange={(event) => {
+              setEditorPinInput(event.target.value)
+              setEditorPinTouched(true)
+              quizMetaDirtyRef.current = true
+              queueAutosave()
+            }}
+            placeholder={t('editor.pinPlaceholder')}
+            type="password"
+            value={editorPinInput}
+          />
+        </label>
+
+        <span className="helper-text">{t('editor.pinHint')}</span>
 
         <div className="selection-field">
           <span>{t('editor.mode')}</span>
@@ -546,7 +583,7 @@ export function QuizEditorPage() {
             setBusy(true)
             setError('')
             try {
-              const exported = await api.exportQuiz(token, quiz.id)
+              const exported = await api.exportQuiz(token, quiz.id, getStoredQuizPin(quiz.id) || undefined)
               downloadBlob(exported.blob, exported.filename)
             } catch (exportError) {
               setError(exportError instanceof Error ? exportError.message : 'Could not export quiz')
@@ -594,8 +631,8 @@ export function QuizEditorPage() {
                     setError('')
                     try {
                       await flushAutosave()
-                      await api.deleteQuestion(token, quiz.id, question.id)
-                      const updatedQuiz = await api.getQuiz(token, quizId)
+                      await api.deleteQuestion(token, quiz.id, question.id, getStoredQuizPin(quiz.id) || undefined)
+                      const updatedQuiz = await api.getQuiz(token, quizId, getStoredQuizPin(quiz.id) || undefined)
                       setQuiz(updatedQuiz)
                     } catch (deleteError) {
                       setError(deleteError instanceof Error ? deleteError.message : 'Could not delete question')
@@ -819,7 +856,7 @@ export function QuizEditorPage() {
                             try {
                               const upload = await api.uploadQuizMedia(token, quiz.id, file, (progress) => {
                                 setMediaUploadProgress((current) => ({ ...current, [question.id]: progress }))
-                              })
+                              }, getStoredQuizPin(quiz.id) || undefined)
 
                               patchQuestion(question.id, (current) => ({ ...current, mediaUrl: upload.url }))
                             } catch (uploadError) {
@@ -890,8 +927,8 @@ export function QuizEditorPage() {
                 timeLimitSeconds: 20,
                 points: 100,
                 penaltyPoints: 100,
-              })
-              const updatedQuiz = await api.getQuiz(token, quizId)
+              }, getStoredQuizPin(quiz.id) || undefined)
+              const updatedQuiz = await api.getQuiz(token, quizId, getStoredQuizPin(quiz.id) || undefined)
               setQuiz(updatedQuiz)
             } catch (createError) {
               setError(createError instanceof Error ? createError.message : 'Could not add question')

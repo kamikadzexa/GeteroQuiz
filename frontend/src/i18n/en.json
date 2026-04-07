@@ -231,5 +231,11 @@
     "addQuestion": "Add question",
     "exportQuiz": "Export ZIP",
     "importQuiz": "Import ZIP"
+    ,
+    "pinLabel": "Editor PIN",
+    "pinPlaceholder": "Optional quiz PIN",
+    "pinHint": "Set a PIN to protect editing, exporting, and host controls for this quiz. Leave it blank to remove protection.",
+    "pinPrompt": "Enter the quiz PIN to open or manage this protected quiz.",
+    "sessionPinPrompt": "Enter the quiz PIN to control this protected session."
   }
 }

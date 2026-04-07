@@ -110,6 +110,7 @@ export interface QuizSummary {
   mode: QuizMode
   accentColor: string
   isPublished: boolean
+  hasEditorPin: boolean
   questionCount: number
   updatedAt: string
 }
@@ -121,6 +122,7 @@ export interface QuizDetail {
   mode: QuizMode
   accentColor: string
   isPublished: boolean
+  hasEditorPin: boolean
   questions: Question[]
 }
 
@@ -139,6 +141,7 @@ export interface SessionSummary {
     title: string
     mode: QuizMode
     accentColor: string
+    hasEditorPin?: boolean
   }
 }
 

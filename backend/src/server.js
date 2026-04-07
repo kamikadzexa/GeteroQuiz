@@ -34,6 +34,13 @@ async function ensureQuizStorageColumn() {
       allowNull: true,
     });
   }
+
+  if (!quizTable.editorPinHash) {
+    await queryInterface.addColumn('quizzes', 'editorPinHash', {
+      type: DataTypes.STRING,
+      allowNull: true,
+    });
+  }
 }
 
 async function startServer() {

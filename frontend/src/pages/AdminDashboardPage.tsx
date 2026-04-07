@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useI18n } from '../context/I18nContext'
-import { api } from '../services/api'
+import { api, setStoredQuizPin, setStoredSessionPin } from '../services/api'
 import type { QuizMode, QuizSummary, SessionSummary } from '../types'
+import { withQuizPin, withSessionPin } from '../utils/quizPin'
 
 export function AdminDashboardPage() {
   const { t } = useI18n()
@@ -19,6 +20,7 @@ export function AdminDashboardPage() {
   const [sessions, setSessions] = useState<SessionSummary[]>([])
   const [createTitle, setCreateTitle] = useState('')
   const [createMode, setCreateMode] = useState<QuizMode>('classic')
+  const [createEditorPin, setCreateEditorPin] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const importInputRef = useRef<HTMLInputElement | null>(null)
@@ -49,6 +51,29 @@ export function AdminDashboardPage() {
       setError(loadError instanceof Error ? loadError.message : 'Could not load dashboard')
     })
   }, [token])
+
+  async function openQuizEditor(quiz: QuizSummary) {
+    await withQuizPin(
+      quiz.id,
+      async (quizPin) => {
+        await api.getQuiz(token!, String(quiz.id), quizPin)
+        navigate(`/admin/quizzes/${quiz.id}`)
+      },
+      t('editor.pinPrompt'),
+    )
+  }
+
+  async function openAdminSession(session: SessionSummary) {
+    await withSessionPin(
+      session.id,
+      session.quiz.id,
+      async (quizPin) => {
+        await api.getAdminSession(token!, session.id, quizPin)
+        navigate(`/admin/sessions/${session.id}`)
+      },
+      t('editor.sessionPinPrompt'),
+    )
+  }
 
   if (loading) {
     return <section className="panel">{t('common.loading')}</section>
@@ -150,9 +175,9 @@ export function AdminDashboardPage() {
           </div>
           <div className="action-row">
             {user.role === 'admin' ? (
-              <Link className="ghost-button" to="/admin/users">
+              <a className="ghost-button" href="/admin/users" onClick={(event) => { event.preventDefault(); navigate('/admin/users') }}>
                 {t('admin.manageUsers')}
-              </Link>
+              </a>
             ) : null}
             <button className="ghost-button" onClick={logout} type="button">
               {t('admin.logout')}
@@ -174,6 +199,12 @@ export function AdminDashboardPage() {
             <option value="classic">{t('admin.modeClassic')}</option>
             <option value="buzz">{t('admin.modeBuzz')}</option>
           </select>
+          <input
+            onChange={(event) => setCreateEditorPin(event.target.value)}
+            placeholder={t('editor.pinPlaceholder')}
+            type="password"
+            value={createEditorPin}
+          />
           <button
             className="cta-button secondary"
             disabled={busy || !createTitle}
@@ -185,8 +216,13 @@ export function AdminDashboardPage() {
                   title: createTitle,
                   description: '',
                   mode: createMode,
+                  editorPin: createEditorPin,
                 })
+                if (createEditorPin) {
+                  setStoredQuizPin(quiz.id, createEditorPin)
+                }
                 setCreateTitle('')
+                setCreateEditorPin('')
                 await refreshDashboard()
                 navigate(`/admin/quizzes/${quiz.id}`)
               } catch (createError) {
@@ -256,7 +292,17 @@ export function AdminDashboardPage() {
                   onClick={async () => {
                     setBusy(true)
                     try {
-                      const created = await api.createSession(token, quiz.id)
+                      const created = await withQuizPin(
+                        quiz.id,
+                        async (quizPin) => {
+                          const createdSession = await api.createSession(token, quiz.id, quizPin)
+                          if (quizPin) {
+                            setStoredSessionPin(createdSession.id, quizPin)
+                          }
+                          return createdSession
+                        },
+                        t('editor.sessionPinPrompt'),
+                      )
                       await refreshDashboard()
                       navigate(`/admin/sessions/${created.id}`)
                     } catch (createError) {
@@ -269,9 +315,17 @@ export function AdminDashboardPage() {
                 >
                   {t('admin.startSession')}
                 </button>
-                <Link className="ghost-button" to={`/admin/quizzes/${quiz.id}`}>
+                <button
+                  className="ghost-button"
+                  onClick={() => {
+                    void openQuizEditor(quiz).catch((openError) => {
+                      setError(openError instanceof Error ? openError.message : 'Could not open quiz')
+                    })
+                  }}
+                  type="button"
+                >
                   {t('admin.editQuiz')}
-                </Link>
+                </button>
                 <button
                   className="ghost-button"
                   disabled={busy}
@@ -279,7 +333,11 @@ export function AdminDashboardPage() {
                     setBusy(true)
                     setError('')
                     try {
-                      const exported = await api.exportQuiz(token, quiz.id)
+                      const exported = await withQuizPin(
+                        quiz.id,
+                        (quizPin) => api.exportQuiz(token, quiz.id, quizPin),
+                        t('editor.pinPrompt'),
+                      )
                       downloadBlob(exported.blob, exported.filename)
                     } catch (exportError) {
                       setError(exportError instanceof Error ? exportError.message : 'Could not export quiz')
@@ -300,7 +358,11 @@ export function AdminDashboardPage() {
                     setBusy(true)
                     setError('')
                     try {
-                      await api.deleteQuiz(token, quiz.id)
+                      await withQuizPin(
+                        quiz.id,
+                        (quizPin) => api.deleteQuiz(token, quiz.id, quizPin),
+                        t('editor.pinPrompt'),
+                      )
                       await refreshDashboard()
                     } catch (deleteError) {
                       setError(deleteError instanceof Error ? deleteError.message : 'Could not delete quiz')
@@ -339,9 +401,17 @@ export function AdminDashboardPage() {
                 <span className="chip">{session.phase}</span>
               </div>
               <div className="action-row">
-                <Link className="ghost-button" to={`/admin/sessions/${session.id}`}>
+                <button
+                  className="ghost-button"
+                  onClick={() => {
+                    void openAdminSession(session).catch((openError) => {
+                      setError(openError instanceof Error ? openError.message : 'Could not open session')
+                    })
+                  }}
+                  type="button"
+                >
                   {t('admin.openSession')}
-                </Link>
+                </button>
                 <button
                   className="ghost-button danger-button"
                   disabled={busy}
@@ -349,7 +419,12 @@ export function AdminDashboardPage() {
                     setBusy(true)
                     setError('')
                     try {
-                      await api.deleteSession(token, session.id)
+                      await withSessionPin(
+                        session.id,
+                        session.quiz.id,
+                        (quizPin) => api.deleteSession(token, session.id, quizPin),
+                        t('editor.sessionPinPrompt'),
+                      )
                       await refreshDashboard()
                     } catch (deleteError) {
                       setError(deleteError instanceof Error ? deleteError.message : 'Could not remove session')

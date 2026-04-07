@@ -344,6 +344,16 @@ h3 {
   display: block;
 }
 
+.session-preview > div,
+.winner-banner > div,
+.helper-banner > div,
+.session-card > div,
+.admin-player-card > div {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
 .session-preview span,
 .winner-banner span,
 .helper-text,
@@ -951,7 +961,7 @@ select:focus {
 }
 
 .admin-create-grid {
-  grid-template-columns: 1.3fr 0.7fr auto;
+  grid-template-columns: 1.2fr 0.7fr minmax(12rem, 0.9fr) auto;
   align-items: center;
 }
 

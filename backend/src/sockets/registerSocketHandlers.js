@@ -1,5 +1,6 @@
 const { verifyAdminToken } = require('../services/authService');
 const { User } = require('../models');
+const { getSessionQuizForRequest } = require('../services/quizAccessService');
 
 function registerSocketHandlers(io, runtimeService) {
   io.on('connection', (socket) => {
@@ -25,6 +26,13 @@ function registerSocketHandlers(io, runtimeService) {
         if (!user || user.status !== 'active' || !['admin', 'editor'].includes(user.role)) {
           throw new Error('Your account does not have access yet');
         }
+        await getSessionQuizForRequest(
+          {
+            headers: { 'x-quiz-pin': payload.quizPin || '' },
+            body: payload,
+          },
+          sessionId,
+        );
         socket.data.sessionId = sessionId;
         socket.data.role = 'admin';
         socket.join(runtimeService.getAdminRoom(sessionId));

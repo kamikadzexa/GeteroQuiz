@@ -4,7 +4,7 @@ function notFoundHandler(_req, res) {
 
 function errorHandler(error, _req, res, _next) {
   console.error(error);
-  res.status(500).json({
+  res.status(Number(error.status) || 500).json({
     message: error.message || 'Unexpected server error',
   });
 }

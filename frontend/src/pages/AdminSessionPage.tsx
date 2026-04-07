@@ -4,9 +4,10 @@ import { LeaderboardCard } from '../components/shared/LeaderboardCard'
 import { useAuth } from '../context/AuthContext'
 import { useI18n } from '../context/I18nContext'
 import { useCountdown } from '../hooks/useCountdown'
-import { api } from '../services/api'
+import { api, getStoredSessionPin, setStoredSessionPin } from '../services/api'
 import { getSocket } from '../services/socket'
 import type { AdminSessionState } from '../types'
+import { withSessionPin } from '../utils/quizPin'
 
 export function AdminSessionPage() {
   const { t } = useI18n()
@@ -50,7 +51,7 @@ export function AdminSessionPage() {
 
   async function refresh() {
     if (!token) return
-    const nextState = await api.getAdminSession(token, sessionId)
+    const nextState = await api.getAdminSession(token, sessionId, getStoredSessionPin(sessionId) || undefined)
     setSessionState(nextState)
   }
 
@@ -75,7 +76,12 @@ export function AdminSessionPage() {
     setActionBusy(true)
     try {
       setError('')
-      const next = await api.updateAutoAdvance(token, sessionState.id, { answerDurationSeconds: duration })
+      const next = await api.updateAutoAdvance(
+        token,
+        sessionState.id,
+        { answerDurationSeconds: duration },
+        getStoredSessionPin(sessionId) || undefined,
+      )
       setSessionState(next)
       setAnswerInput(String(next.answerDurationSeconds))
     } catch (e) {
@@ -101,7 +107,12 @@ export function AdminSessionPage() {
     setActionBusy(true)
     try {
       setError('')
-      const next = await api.updateAutoAdvance(token, sessionState.id, { durationSeconds: duration })
+      const next = await api.updateAutoAdvance(
+        token,
+        sessionState.id,
+        { durationSeconds: duration },
+        getStoredSessionPin(sessionId) || undefined,
+      )
       setSessionState(next)
       setDurationInput(String(next.autoAdvanceDurationSeconds))
     } catch (e) {
@@ -117,7 +128,12 @@ export function AdminSessionPage() {
     setActionBusy(true)
     try {
       setError('')
-      const next = await api.updateAutoAdvance(token, sessionState.id, { enabled: !timerEnabled })
+      const next = await api.updateAutoAdvance(
+        token,
+        sessionState.id,
+        { enabled: !timerEnabled },
+        getStoredSessionPin(sessionId) || undefined,
+      )
       setSessionState(next)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not update timer')
@@ -131,7 +147,12 @@ export function AdminSessionPage() {
     setActionBusy(true)
     try {
       setError('')
-      const next = await api.updateAutoAdvance(token, sessionState.id, { paused: !timerPaused })
+      const next = await api.updateAutoAdvance(
+        token,
+        sessionState.id,
+        { paused: !timerPaused },
+        getStoredSessionPin(sessionId) || undefined,
+      )
       setSessionState(next)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not update timer')
@@ -146,10 +167,11 @@ export function AdminSessionPage() {
     try {
       setActionBusy(true)
       setError('')
-      if (action === 'advance') await api.advanceSession(token, sessionState.id)
-      if (action === 'close') await api.closeQuestion(token, sessionState.id)
-      if (action === 'replay') await api.replayQuestion(token, sessionState.id)
-      if (action === 'finish') await api.finishSession(token, sessionState.id)
+      const quizPin = getStoredSessionPin(sessionId) || undefined
+      if (action === 'advance') await api.advanceSession(token, sessionState.id, quizPin)
+      if (action === 'close') await api.closeQuestion(token, sessionState.id, quizPin)
+      if (action === 'replay') await api.replayQuestion(token, sessionState.id, quizPin)
+      if (action === 'finish') await api.finishSession(token, sessionState.id, quizPin)
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : 'Could not update session')
     } finally {
@@ -166,26 +188,37 @@ export function AdminSessionPage() {
       socket.connect()
     }
 
-    refresh().catch((loadError) => {
+    void withSessionPin(
+      sessionId,
+      undefined,
+      async (quizPin) => {
+        if (quizPin) {
+          setStoredSessionPin(sessionId, quizPin)
+        }
+        const nextState = await api.getAdminSession(token, sessionId, quizPin)
+        setSessionState(nextState)
+
+        socket.emit(
+          'join-admin-session',
+          { sessionId: Number(sessionId), token, quizPin: quizPin || undefined },
+          (result: { ok: boolean; message?: string }) => {
+            if (!result?.ok) {
+              setError(result?.message || 'Could not connect to admin session')
+            }
+          },
+        )
+      },
+      t('editor.sessionPinPrompt'),
+    ).catch((loadError) => {
       setError(loadError instanceof Error ? loadError.message : 'Could not load session')
     })
-
-    socket.emit(
-      'join-admin-session',
-      { sessionId: Number(sessionId), token },
-      (result: { ok: boolean; message?: string }) => {
-        if (!result?.ok) {
-          setError(result?.message || 'Could not connect to admin session')
-        }
-      },
-    )
 
     socket.on('admin:state', sync)
 
     return () => {
       socket.off('admin:state', sync)
     }
-  }, [sessionId, token])
+  }, [sessionId, t, token])
 
   useEffect(() => {
     if (!sessionState) return
@@ -426,7 +459,7 @@ export function AdminSessionPage() {
                 <span className="chip">{player.preferredLanguage.toUpperCase()}</span>
                 <button
                   className="ghost-button"
-                  onClick={() => api.kickPlayer(token, sessionState.id, player.id)}
+                  onClick={() => api.kickPlayer(token, sessionState.id, player.id, getStoredSessionPin(sessionId) || undefined)}
                   type="button"
                 >
                   {t('admin.kick')}
@@ -458,14 +491,14 @@ export function AdminSessionPage() {
             <div className="action-row">
               <button
                 className="cta-button secondary"
-                onClick={() => api.judgeBuzz(token, sessionState.id, true)}
+                onClick={() => api.judgeBuzz(token, sessionState.id, true, getStoredSessionPin(sessionId) || undefined)}
                 type="button"
               >
                 {t('admin.correct')}
               </button>
               <button
                 className="ghost-button"
-                onClick={() => api.judgeBuzz(token, sessionState.id, false)}
+                onClick={() => api.judgeBuzz(token, sessionState.id, false, getStoredSessionPin(sessionId) || undefined)}
                 type="button"
               >
                 {t('admin.wrong')}
@@ -491,14 +524,14 @@ export function AdminSessionPage() {
                 <div className="action-row">
                   <button
                     className="cta-button secondary"
-                    onClick={() => api.judgeAnswer(token, sessionState.id, answer.id, true)}
+                    onClick={() => api.judgeAnswer(token, sessionState.id, answer.id, true, getStoredSessionPin(sessionId) || undefined)}
                     type="button"
                   >
                     {t('admin.correct')}
                   </button>
                   <button
                     className="ghost-button"
-                    onClick={() => api.judgeAnswer(token, sessionState.id, answer.id, false)}
+                    onClick={() => api.judgeAnswer(token, sessionState.id, answer.id, false, getStoredSessionPin(sessionId) || undefined)}
                     type="button"
                   >
                     {t('admin.wrong')}

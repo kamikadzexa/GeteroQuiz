@@ -231,5 +231,11 @@
     "addQuestion": "Добавить вопрос",
     "exportQuiz": "Экспорт ZIP",
     "importQuiz": "Импорт ZIP"
+    ,
+    "pinLabel": "PIN editor",
+    "pinPlaceholder": "PIN quiz",
+    "pinHint": "PIN protects editing, export, and host controls.",
+    "pinPrompt": "Enter the quiz PIN.",
+    "sessionPinPrompt": "Enter the quiz PIN for this session."
   }
 }
