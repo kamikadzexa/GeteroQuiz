@@ -142,7 +142,7 @@ export function AdminDashboardPage() {
 
   return (
     <div className="admin-dashboard-layout">
-      <section className="panel">
+      <section className="panel admin-dashboard-panel">
         <div className="inline-header">
           <div>
             <span className="eyebrow">{t('admin.badge')}</span>

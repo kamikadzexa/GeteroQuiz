@@ -263,6 +263,11 @@ a {
   padding: 1.4rem;
 }
 
+.admin-dashboard-panel {
+  display: grid;
+  gap: 1rem;
+}
+
 .compact-panel {
   padding: 1.1rem;
 }
@@ -509,6 +514,8 @@ select {
   border-radius: 1rem;
   border: 1px solid rgba(36, 21, 51, 0.14);
   padding: 0.85rem 0.95rem;
+  min-height: 3.1rem;
+  line-height: 1.35;
   background: rgba(255, 255, 255, 0.88);
   color: var(--ink);
 }
@@ -537,6 +544,8 @@ select:focus {
   border-radius: 1rem;
   border: 1px solid transparent;
   padding: 0.85rem 1.1rem;
+  min-height: 3.1rem;
+  line-height: 1.35;
 }
 
 .cta-button {
