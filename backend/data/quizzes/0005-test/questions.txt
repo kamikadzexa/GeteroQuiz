@@ -1,0 +1,8 @@
+Quiz: TEST
+
+Description: 
+
+Mode: classic
+
+Accent color: #ff5f6d
+

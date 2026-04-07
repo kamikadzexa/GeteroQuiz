@@ -128,7 +128,7 @@ async function createQuestion(req, res, next) {
       mediaUrl: req.body.mediaUrl || '',
       timeLimitSeconds: req.body.timeLimitSeconds ?? 20,
       points: req.body.points ?? 100,
-      penaltyPoints: req.body.penaltyPoints ?? 50,
+      penaltyPoints: req.body.penaltyPoints ?? 100,
     });
 
     await syncQuizStorage(quiz.id);

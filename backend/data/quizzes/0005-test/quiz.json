@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "exportedAt": "2026-04-07T07:08:51.320Z",
+  "storageKey": "0005-test",
+  "quiz": {
+    "title": "TEST",
+    "description": "",
+    "mode": "classic",
+    "accentColor": "#ff5f6d",
+    "isPublished": true,
+    "questions": []
+  }
+}

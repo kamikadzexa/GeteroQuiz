@@ -43,7 +43,14 @@ export function I18nProvider({ children }: PropsWithChildren) {
     () => ({
       language,
       setLanguage,
-      t: (key: string) => resolveKey(dictionaries[language], key),
+      t: (key: string) => {
+        const localized = resolveKey(dictionaries[language], key)
+        if (localized !== key) {
+          return localized
+        }
+
+        return resolveKey(dictionaries.en, key)
+      },
     }),
     [language],
   )
