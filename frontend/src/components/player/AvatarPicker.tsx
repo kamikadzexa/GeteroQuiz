@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useI18n } from '../../context/I18nContext'
-import { api, assetUrl } from '../../services/api'
+import { api, assetUrl, getUploadSizeError, MAX_UPLOAD_SIZE_MB } from '../../services/api'
 
 const presets = [
   'emoji:\u{1F389}',
@@ -42,6 +42,7 @@ export function AvatarPicker({
   const { t } = useI18n()
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<number | null>(null)
+  const [uploadError, setUploadError] = useState('')
   const [expanded, setExpanded] = useState(false)
 
   const visiblePresets = useMemo(() => {
@@ -82,11 +83,21 @@ export function AvatarPicker({
             const file = event.target.files?.[0]
             if (!file) return
 
+            const sizeError = getUploadSizeError(file)
+            if (sizeError) {
+              setUploadError(sizeError)
+              event.currentTarget.value = ''
+              return
+            }
+
+            setUploadError('')
             setUploading(true)
             setUploadProgress(0)
             try {
               const result = await api.uploadAvatar(file, setUploadProgress)
               onChange(result.url)
+            } catch (error) {
+              setUploadError(error instanceof Error ? error.message : 'Avatar upload failed')
             } finally {
               setUploading(false)
               setUploadProgress(null)
@@ -97,6 +108,8 @@ export function AvatarPicker({
         />
         {uploading ? t('common.loading') : t('join.uploadImage')}
       </label>
+      <span className="helper-text">Max upload size: {MAX_UPLOAD_SIZE_MB} MB</span>
+      {uploadError ? <p className="error-text">{uploadError}</p> : null}
       {uploadProgress !== null ? (
         <div className="upload-progress" role="progressbar" aria-valuemax={100} aria-valuemin={0} aria-valuenow={uploadProgress}>
           <div className="upload-progress-fill" style={{ width: `${uploadProgress}%` }} />

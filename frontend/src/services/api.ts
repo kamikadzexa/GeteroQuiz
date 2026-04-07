@@ -11,10 +11,20 @@ import type {
 } from '../types'
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api'
+export const MAX_UPLOAD_SIZE_MB = 300
+const MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024
 
 type UploadOptions = {
   token?: string
   onProgress?: (progress: number) => void
+}
+
+export function getUploadSizeError(file: File) {
+  if (file.size <= MAX_UPLOAD_SIZE_BYTES) {
+    return null
+  }
+
+  return `File is too large. Maximum upload size is ${MAX_UPLOAD_SIZE_MB} MB.`
 }
 
 function normalizePlayerRecord(player: Partial<PlayerRecord> & { id?: number; playerId?: number }): PlayerRecord {

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useI18n } from '../context/I18nContext'
-import { api } from '../services/api'
+import { api, getUploadSizeError, MAX_UPLOAD_SIZE_MB } from '../services/api'
 import type { MediaType, Question, QuestionOption, QuestionType, QuizDetail } from '../types'
 
 function serializeOptions(options: QuestionOption[]) {
@@ -145,6 +145,13 @@ export function QuizEditorPage() {
           onChange={async (event) => {
             const file = event.target.files?.[0]
             if (!file) return
+
+            const uploadSizeError = getUploadSizeError(file)
+            if (uploadSizeError) {
+              setError(uploadSizeError)
+              event.currentTarget.value = ''
+              return
+            }
 
             setSaving(true)
             setError('')
@@ -409,6 +416,13 @@ export function QuizEditorPage() {
                       const file = event.target.files?.[0]
                       if (!file) return
 
+                      const uploadSizeError = getUploadSizeError(file)
+                      if (uploadSizeError) {
+                        setError(uploadSizeError)
+                        event.currentTarget.value = ''
+                        return
+                      }
+
                       setError('')
                       setMediaUploadProgress((current) => ({ ...current, [question.id]: 0 }))
 
@@ -436,6 +450,7 @@ export function QuizEditorPage() {
                     }}
                     type="file"
                   />
+                  <span className="helper-text">Max upload size: {MAX_UPLOAD_SIZE_MB} MB</span>
                   {typeof mediaUploadProgress[question.id] === 'number' ? (
                     <div
                       className="upload-progress"

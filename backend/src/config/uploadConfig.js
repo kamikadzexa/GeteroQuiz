@@ -1,4 +1,4 @@
-const DEFAULT_MAX_UPLOAD_SIZE_MB = 25;
+const DEFAULT_MAX_UPLOAD_SIZE_MB = 300;
 
 function getMaxUploadSizeMb() {
   const parsed = Number(process.env.MAX_UPLOAD_SIZE_MB);

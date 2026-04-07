@@ -148,7 +148,7 @@ ADMIN_USERNAME=admin
 ADMIN_PASSWORD=replace-me
 ADMIN_DISPLAY_NAME=Quiz Host
 CORS_ORIGIN=https://your-domain.example
-MAX_UPLOAD_SIZE_MB=25
+MAX_UPLOAD_SIZE_MB=300
 ```
 
 ### 4. Run backend with PM2
@@ -168,7 +168,7 @@ Example Nginx site config:
 server {
     listen 80;
     server_name your-domain.example;
-    client_max_body_size 25M;
+    client_max_body_size 300M;
 
     root /var/www/getero-quiz/frontend/dist;
     index index.html;
@@ -209,10 +209,10 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-If uploads larger than 1 MB fail on Ubuntu, double-check the `client_max_body_size` value in your active Nginx site config and reload Nginx after changing it.
+If uploads larger than 1 MB fail on Ubuntu, double-check the `client_max_body_size 300M;` value in your active Nginx site config and reload Nginx after changing it.
 
 ## Notes
 
 - Session state is kept in memory for realtime flow and mirrored to SQLite for fallback data.
 - Uploaded files are stored locally under `backend/uploads`.
-- If port `4000` is already taken locally, change `PORT` in `backend/.env`.
+- Backend runs on port `4000`.
