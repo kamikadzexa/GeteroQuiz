@@ -23,6 +23,27 @@ interface I18nContextValue {
 const dictionaries: Record<Language, Dictionary> = { en, ru }
 const I18nContext = createContext<I18nContextValue | null>(null)
 
+function detectBrowserLanguage(): Language {
+  if (typeof window === 'undefined') {
+    return 'en'
+  }
+
+  const savedLanguage = localStorage.getItem('quiz-language') as Language | null
+  if (savedLanguage === 'en' || savedLanguage === 'ru') {
+    return savedLanguage
+  }
+
+  const browserLanguages = navigator.languages?.length
+    ? navigator.languages
+    : [navigator.language]
+
+  const prefersRussian = browserLanguages.some((locale) =>
+    locale.toLowerCase().startsWith('ru'),
+  )
+
+  return prefersRussian ? 'ru' : 'en'
+}
+
 function resolveKey(dictionary: Dictionary, key: string): string {
   return key.split('.').reduce<string | Dictionary>((acc, segment) => {
     if (typeof acc === 'string') return acc
@@ -31,9 +52,7 @@ function resolveKey(dictionary: Dictionary, key: string): string {
 }
 
 export function I18nProvider({ children }: PropsWithChildren) {
-  const [language, setLanguage] = useState<Language>(
-    () => (localStorage.getItem('quiz-language') as Language | null) || 'en',
-  )
+  const [language, setLanguage] = useState<Language>(() => detectBrowserLanguage())
 
   useEffect(() => {
     localStorage.setItem('quiz-language', language)
