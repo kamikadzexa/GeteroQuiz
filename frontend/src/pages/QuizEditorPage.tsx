@@ -348,7 +348,7 @@ export function QuizEditorPage() {
       case 'error':
         return t('editor.autosaveFailed')
       default:
-        return t('editor.autosaveHint')
+        return t('editor.autosaveReady')
     }
   }
 
@@ -374,7 +374,6 @@ export function QuizEditorPage() {
           <h1>{quiz.title}</h1>
         </div>
         <div className="action-row">
-          <span className={`save-chip save-${saveState}`}>{getSaveLabel()}</span>
           <button
             className="ghost-button danger-button"
             disabled={busy}

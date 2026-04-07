@@ -1,8 +1,24 @@
 Quiz: TEST
 
-Description: 
+Description: Е
 
 Mode: classic
 
 Accent color: #ff5f6d
 
+
+
+Question 1
+Prompt: 
+Type: multiple_choice
+Timer: 20s
+Points: 100
+Penalty: 100
+Options:
+- A: 
+- B: 
+- C: 
+- D: 
+Correct answer: C
+Media type: video
+Media: /quiz-data/0005-test/media/1775546822420-YTDown-com_YouTube_SFM-WHAT-THE-FUCK-IS-A-KILOMETER_Media_Y-3IV11_ZgA_001_1080p.mp4

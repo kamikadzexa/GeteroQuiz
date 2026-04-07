@@ -173,6 +173,7 @@
     "classicModeHint": "Standard question flow with everyone answering together.",
     "buzzModeHint": "Players buzz in first, then the host reviews the attempt.",
     "autosaveHint": "Every change is saved automatically. No save button needed.",
+    "autosaveReady": "Autosave on",
     "autosavePending": "Changes queued",
     "autosaving": "Saving changes...",
     "autosaved": "All changes saved",
