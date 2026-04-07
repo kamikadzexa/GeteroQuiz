@@ -1098,6 +1098,10 @@ select:focus {
   justify-content: flex-start;
 }
 
+.auth-submit-button {
+  margin-top: 1rem;
+}
+
 .danger-button {
   color: var(--danger);
 }

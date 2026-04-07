@@ -107,7 +107,7 @@ export function AdminDashboardPage() {
         {authMessage ? <p className="helper-text success-text">{authMessage}</p> : null}
 
         <button
-          className="cta-button"
+          className="cta-button auth-submit-button"
           onClick={async () => {
             try {
               setAuthError('')
