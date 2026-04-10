@@ -1901,12 +1901,15 @@ select:focus {
   display: grid;
   gap: 0.7rem;
   width: 100%;
+  overflow-x: auto;
+  /* Each column gets at least 8rem before the row scrolls horizontally */
+  min-width: 0;
 }
 
 .buzz-board-column {
   display: grid;
   gap: 0.5rem;
-  min-width: 0;
+  min-width: 11rem;
 }
 
 .buzz-board-col-header {
@@ -1928,7 +1931,7 @@ select:focus {
 .board-tile {
   display: grid;
   place-items: center;
-  min-height: 4.1rem;
+  min-height: 5rem;
   border-radius: 1.1rem;
   font-weight: 800;
   font-size: 1.15rem;
