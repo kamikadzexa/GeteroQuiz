@@ -25,9 +25,9 @@ export default defineConfig(({ mode }) => {
       // across app deploys (content hash only changes when deps change)
       rollupOptions: {
         output: {
-          manualChunks: {
-            vendor: ['react', 'react-dom', 'react-router-dom'],
-            socket: ['socket.io-client'],
+          manualChunks(id) {
+            if (id.includes('socket.io-client')) return 'socket'
+            if (id.includes('node_modules')) return 'vendor'
           },
         },
       },
