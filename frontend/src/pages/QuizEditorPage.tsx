@@ -370,6 +370,7 @@ export function QuizEditorPage() {
   }
 
   function moveQuestion(questionId: number, direction: -1 | 1) {
+    if (!quiz) return
     const layout = sanitizeBoardLayout(quiz.boardLayout)
     const roundIdx = Object.fromEntries(layout.map((r, i) => [r.name, i]))
     const sorted = [...questions].sort((a, b) => {
