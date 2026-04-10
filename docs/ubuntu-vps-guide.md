@@ -287,15 +287,40 @@ cd /var/www/getero-quiz
 git pull origin main
 ```
 
-### Step 3. Update backend dependencies if needed
+Confirm you got the expected commit:
+
+```bash
+git log -1 --oneline
+```
+
+### Step 3. Update backend dependencies
+
+Run this every time after a pull so any added or changed packages are installed.
+It is safe to run when nothing changed — it will finish instantly.
 
 ```bash
 cd /var/www/getero-quiz/backend
 npm install --omit=dev
+```
+
+### Step 4. Restart the backend
+
+```bash
 pm2 restart getero-quiz
 ```
 
-### Step 4. Update frontend dependencies and rebuild
+Wait a few seconds, then confirm the process is online and not crashing:
+
+```bash
+pm2 status
+pm2 logs getero-quiz --lines 30
+```
+
+If the logs show errors, check the `.env` file and fix the issue before continuing.
+
+### Step 5. Update frontend dependencies and rebuild
+
+Run this every time after a pull.
 
 ```bash
 cd /var/www/getero-quiz/frontend
@@ -303,30 +328,46 @@ npm install
 npm run build
 ```
 
-### Step 5. Reload Nginx
+The build output goes to `/var/www/getero-quiz/frontend/dist`.
+Check that new files appeared there and the timestamps are current:
+
+```bash
+ls -la /var/www/getero-quiz/frontend/dist
+```
+
+### Step 6. Reload Nginx
 
 ```bash
 sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-### Step 6. Verify the update
+Always run `nginx -t` first. If it reports a config error, fix it before reloading.
+
+### Step 7. Verify the update
+
+Open the site in the browser. If it still shows old content:
+
+1. Hard-refresh the browser (Ctrl+Shift+R on Windows, Cmd+Shift+R on Mac).
+2. Check that the dist folder has the correct build:
 
 ```bash
-pm2 status
-pm2 logs getero-quiz --lines 50
-ls -la /var/www/getero-quiz/frontend/dist
+ls -la /var/www/getero-quiz/frontend/dist/assets/
 ```
 
-If the site still shows old content:
+3. Check Nginx is serving the right folder:
 
 ```bash
-cd /var/www/getero-quiz
-git log -1 --oneline
-
 sudo grep -R "root /var/www/getero-quiz/frontend/dist;" /etc/nginx/sites-enabled /etc/nginx/sites-available
-pm2 show getero-quiz
 ```
+
+4. Check the backend is running on port 4000:
+
+```bash
+curl -s http://127.0.0.1:4000/api/health
+```
+
+This should return `{"ok":true}`. If it does not, the backend process is down — check `pm2 logs getero-quiz`.
 
 ## 3. Updating Ubuntu And Installed Programs
 
@@ -485,14 +526,17 @@ npm run build
 ```bash
 cd /var/www/getero-quiz
 git pull origin main
-cd backend
+git log -1 --oneline
+cd /var/www/getero-quiz/backend
 npm install --omit=dev
 pm2 restart getero-quiz
-cd ../frontend
+pm2 logs getero-quiz --lines 20 --nostream
+cd /var/www/getero-quiz/frontend
 npm install
 npm run build
 sudo nginx -t
 sudo systemctl reload nginx
+curl -s http://127.0.0.1:4000/api/health
 ```
 
 ### Full uninstall summary

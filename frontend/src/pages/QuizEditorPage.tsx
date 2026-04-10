@@ -369,6 +369,29 @@ export function QuizEditorPage() {
     })
   }
 
+  function moveQuestion(questionId: number, direction: -1 | 1) {
+    const layout = sanitizeBoardLayout(quiz.boardLayout)
+    const roundIdx = Object.fromEntries(layout.map((r, i) => [r.name, i]))
+    const sorted = [...questions].sort((a, b) => {
+      const ra = a.roundName ? (roundIdx[a.roundName] ?? layout.length) : layout.length
+      const rb = b.roundName ? (roundIdx[b.roundName] ?? layout.length) : layout.length
+      if (ra !== rb) return ra - rb
+      return a.order - b.order
+    })
+
+    const index = sorted.findIndex((q) => q.id === questionId)
+    const nextIndex = index + direction
+
+    if (index < 0 || nextIndex < 0 || nextIndex >= sorted.length) return
+    if (sorted[index].roundName !== sorted[nextIndex].roundName) return
+
+    const aOrder = sorted[index].order
+    const bOrder = sorted[nextIndex].order
+
+    patchQuestion(sorted[index].id, (q) => ({ ...q, order: bOrder }))
+    patchQuestion(sorted[nextIndex].id, (q) => ({ ...q, order: aOrder }))
+  }
+
   function moveOption(questionId: number, optionId: string, direction: -1 | 1) {
     patchQuestion(questionId, (question) => {
       const index = question.options.findIndex((option) => option.id === optionId)
@@ -461,6 +484,13 @@ export function QuizEditorPage() {
 
   const questions = Array.isArray(quiz.questions) ? quiz.questions : []
   const boardLayout = sanitizeBoardLayout(quiz.boardLayout)
+  const roundIndexMap = Object.fromEntries(boardLayout.map((r, i) => [r.name, i]))
+  const sortedQuestions = [...questions].sort((a, b) => {
+    const ra = a.roundName ? (roundIndexMap[a.roundName] ?? boardLayout.length) : boardLayout.length
+    const rb = b.roundName ? (roundIndexMap[b.roundName] ?? boardLayout.length) : boardLayout.length
+    if (ra !== rb) return ra - rb
+    return a.order - b.order
+  })
 
   return (
     <section className="panel editor-page">
@@ -901,13 +931,15 @@ export function QuizEditorPage() {
       </div>
 
       <div className="question-stack">
-        {questions.map((question, index) => {
+        {sortedQuestions.map((question, index) => {
           const isBuzzQuiz = quiz.mode === 'buzz'
           const isMultipleChoice = !isBuzzQuiz && question.type === 'multiple_choice'
           const hasMedia = question.mediaType !== 'none'
           const isCollapsed = Boolean(collapsedQuestionIds[question.id])
           const selectedRound = boardLayout.find((round) => round.name === question.roundName) ?? null
           const availableColumns = selectedRound?.columns ?? []
+          const canMoveUp = index > 0 && sortedQuestions[index - 1].roundName === question.roundName
+          const canMoveDown = index < sortedQuestions.length - 1 && sortedQuestions[index + 1].roundName === question.roundName
 
           return (
             <article className="question-editor-card question-editor-flow" key={question.id}>
@@ -918,6 +950,22 @@ export function QuizEditorPage() {
                   </span>
                   <h2>{question.prompt || t('editor.questionUntitled')}</h2>
                 </div>
+                <button
+                  className="ghost-button"
+                  disabled={!canMoveUp}
+                  onClick={() => moveQuestion(question.id, -1)}
+                  type="button"
+                >
+                  {t('editor.moveUp')}
+                </button>
+                <button
+                  className="ghost-button"
+                  disabled={!canMoveDown}
+                  onClick={() => moveQuestion(question.id, 1)}
+                  type="button"
+                >
+                  {t('editor.moveDown')}
+                </button>
                 <button
                   className="ghost-button"
                   onClick={() => toggleQuestionCollapsed(question.id)}
