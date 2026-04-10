@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(wc -l /c/Users/E/source/GeteroQuiz/frontend/src/pages/*.tsx)"
+      "Bash(wc -l /c/Users/E/source/GeteroQuiz/frontend/src/pages/*.tsx)",
+      "Bash(xargs cat:*)"
     ]
   }
 }

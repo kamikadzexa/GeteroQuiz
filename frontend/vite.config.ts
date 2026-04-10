@@ -20,5 +20,17 @@ export default defineConfig(({ mode }) => {
         },
       },
     },
+    build: {
+      // Split vendor libraries into a separate chunk so they stay cached
+      // across app deploys (content hash only changes when deps change)
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            vendor: ['react', 'react-dom', 'react-router-dom'],
+            socket: ['socket.io-client'],
+          },
+        },
+      },
+    },
   }
 })

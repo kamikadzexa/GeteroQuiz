@@ -102,8 +102,8 @@ async function startServer() {
   );
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true }));
-  app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
-  app.use('/quiz-data', express.static(path.join(__dirname, '../data/quizzes')));
+  app.use('/uploads', express.static(path.join(__dirname, '../uploads'), { maxAge: '30d' }));
+  app.use('/quiz-data', express.static(path.join(__dirname, '../data/quizzes'), { maxAge: '7d' }));
 
   app.get('/api/health', (_req, res) => {
     res.json({ ok: true });

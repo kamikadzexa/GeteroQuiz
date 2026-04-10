@@ -105,7 +105,7 @@ EOF
 
 ```bash
 cd /var/www/getero-quiz/backend
-pm2 start src/server.js --name getero-quiz
+pm2 start src/server.js --name getero-quiz --max-memory-restart 800M
 pm2 save
 pm2 startup
 ```
@@ -129,15 +129,48 @@ sudo tee /etc/nginx/sites-available/getero-quiz > /dev/null <<'EOF'
 server {
     listen 80;
     server_name your-domain.com www.your-domain.com;
+
+    # Allow large media uploads (must match MAX_UPLOAD_SIZE_MB in backend .env)
     client_max_body_size 300M;
+
+    # Performance: efficient file transfer and connection reuse
+    sendfile on;
+    tcp_nopush on;
+    tcp_nodelay on;
+    keepalive_timeout 65;
+
+    # Gzip compression for text assets
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_proxied any;
+    gzip_types
+        text/plain
+        text/css
+        text/javascript
+        application/javascript
+        application/json
+        application/x-javascript
+        text/xml
+        application/xml
+        image/svg+xml;
 
     root /var/www/getero-quiz/frontend/dist;
     index index.html;
 
+    # SPA fallback for frontend routes
     location / {
         try_files $uri $uri/ /index.html;
     }
 
+    # Vite build assets have content-hashed filenames — cache aggressively
+    location /assets/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        try_files $uri =404;
+    }
+
+    # Backend API — stream uploads without buffering to Node, allow long transfers
     location /api/ {
         proxy_pass http://127.0.0.1:4000/api/;
         proxy_http_version 1.1;
@@ -145,19 +178,47 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Do not buffer uploads in Nginx before forwarding — stream directly to Node
+        proxy_request_buffering off;
+
+        # Allow up to 5 minutes for large file uploads and slow connections
+        proxy_connect_timeout 60s;
+        proxy_send_timeout    300s;
+        proxy_read_timeout    300s;
     }
 
+    # Avatar uploads — served directly from disk for speed
     location /uploads/ {
-        proxy_pass http://127.0.0.1:4000/uploads/;
-        proxy_set_header Host $host;
+        alias /var/www/getero-quiz/backend/uploads/;
+        expires 30d;
+        add_header Cache-Control "public";
+        add_header X-Content-Type-Options nosniff;
+        try_files $uri =404;
     }
 
+    # Quiz media files — served directly from disk for speed
+    # Without this block, quiz images/audio/video will never load on the server.
+    location /quiz-data/ {
+        alias /var/www/getero-quiz/backend/data/quizzes/;
+        expires 7d;
+        add_header Cache-Control "public";
+        add_header X-Content-Type-Options nosniff;
+        try_files $uri =404;
+    }
+
+    # WebSocket for real-time quiz sessions — needs a long idle timeout
     location /socket.io/ {
         proxy_pass http://127.0.0.1:4000/socket.io/;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
         proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+
+        # Keep socket connections alive for the duration of a quiz session
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
     }
 }
 EOF
@@ -446,6 +507,49 @@ sudo rm -rf /var/www/getero-quiz
 ```
 
 ## 6. Common Problems
+
+### Quiz images and audio do not load (media files return 404 or the page)
+
+This means the Nginx config is missing the `/quiz-data/` location block. Nginx has no route for that path and falls through to the SPA fallback, which returns `index.html` instead of the file.
+
+Check whether the block exists:
+
+```bash
+sudo grep -A3 "quiz-data" /etc/nginx/sites-available/getero-quiz
+```
+
+If it is missing, recreate the Nginx config (Step 12) and reload:
+
+```bash
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+Also verify that Nginx can read the media folder:
+
+```bash
+ls /var/www/getero-quiz/backend/data/quizzes/
+```
+
+If the directory is missing or empty, no quiz media has been uploaded yet, which is expected on a fresh install.
+
+### File uploads larger than 1 MB fail with a 413 error
+
+Nginx has a default `client_max_body_size` of 1 MB. The Nginx config for this app raises it to 300 MB. If you are getting 413 errors, the directive is missing or was lost when Certbot rewrote the config for HTTPS.
+
+Check the active config:
+
+```bash
+sudo grep -r "client_max_body_size" /etc/nginx/
+```
+
+If the value is missing or lower than expected, recreate the config (Step 12), then re-run Certbot to restore HTTPS:
+
+```bash
+sudo certbot --nginx -d your-domain.com -d www.your-domain.com -m your-email@example.com --agree-tos --redirect
+sudo nginx -t
+sudo systemctl reload nginx
+```
 
 ### The site did not update after `git pull`
 
