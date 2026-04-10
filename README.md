@@ -116,6 +116,8 @@ SQLite database file location:
 
 ## Ubuntu VPS deployment
 
+For a complete step-by-step guide covering fresh install, app updates, system package updates, SSL setup, and uninstall, see [docs/ubuntu-vps-guide.md](docs/ubuntu-vps-guide.md).
+
 ### 1. Install system packages
 
 ```bash
