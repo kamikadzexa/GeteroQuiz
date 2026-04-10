@@ -142,11 +142,15 @@ async function createQuestion(req, res, next) {
       order: req.body.order ?? 0,
       options: req.body.options || [],
       correctAnswer: req.body.correctAnswer || '',
+      correctAnswerMediaType: req.body.correctAnswerMediaType || 'none',
+      correctAnswerMediaUrl: req.body.correctAnswerMediaUrl || '',
       mediaType: req.body.mediaType || 'none',
       mediaUrl: req.body.mediaUrl || '',
       timeLimitSeconds: req.body.timeLimitSeconds ?? 20,
       points: req.body.points ?? 100,
       penaltyPoints: req.body.penaltyPoints ?? 100,
+      columnName: req.body.columnName || '',
+      specialType: req.body.specialType || 'normal',
     });
 
     await syncQuizStorage(quiz.id);
@@ -172,11 +176,15 @@ async function updateQuestion(req, res, next) {
       order: req.body.order ?? question.order,
       options: req.body.options ?? question.options,
       correctAnswer: req.body.correctAnswer ?? question.correctAnswer,
+      correctAnswerMediaType: req.body.correctAnswerMediaType ?? question.correctAnswerMediaType ?? 'none',
+      correctAnswerMediaUrl: req.body.correctAnswerMediaUrl ?? question.correctAnswerMediaUrl ?? '',
       mediaType: req.body.mediaType ?? question.mediaType,
       mediaUrl: req.body.mediaUrl ?? question.mediaUrl,
       timeLimitSeconds: req.body.timeLimitSeconds ?? question.timeLimitSeconds,
       points: req.body.points ?? question.points,
       penaltyPoints: req.body.penaltyPoints ?? question.penaltyPoints,
+      columnName: req.body.columnName ?? question.columnName ?? '',
+      specialType: req.body.specialType ?? question.specialType ?? 'normal',
     });
 
     await syncQuizStorage(question.quizId);

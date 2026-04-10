@@ -322,6 +322,20 @@ export const api = {
     ),
   kickPlayer: (token: string, sessionId: number, playerId: number, quizPin?: string) =>
     request(`/sessions/${sessionId}/players/${playerId}`, { method: 'DELETE', quizPin }, token),
+  adjustScore: (token: string, sessionId: number, playerId: number, delta: number, quizPin?: string) =>
+    request<{ points: number }>(
+      `/sessions/${sessionId}/players/${playerId}/adjust-score`,
+      { method: 'POST', body: JSON.stringify({ delta }), quizPin },
+      token,
+    ),
+  assignBoardSelector: (token: string, sessionId: number, playerId: number, quizPin?: string) =>
+    request(
+      `/sessions/${sessionId}/board/assign-selector`,
+      { method: 'POST', body: JSON.stringify({ playerId }), quizPin },
+      token,
+    ),
+  closeStakesWager: (token: string, sessionId: number, quizPin?: string) =>
+    request(`/sessions/${sessionId}/board/close-stakes`, { method: 'POST', quizPin }, token),
   deleteSession: (token: string, sessionId: number, quizPin?: string) =>
     request(`/sessions/${sessionId}`, { method: 'DELETE', quizPin }, token),
   uploadAvatar: (file: File, onProgress?: (progress: number) => void) =>

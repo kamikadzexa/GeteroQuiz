@@ -199,6 +199,43 @@ async function replayQuestion(req, res, next) {
   }
 }
 
+async function adjustScore(req, res, next) {
+  try {
+    await getSessionQuizForRequest(req, req.params.sessionId);
+    const score = await req.app.locals.runtimeService.adjustPlayerScore({
+      sessionId: req.params.sessionId,
+      playerId: req.params.playerId,
+      delta: req.body.delta,
+    });
+    return res.json({ points: score.points });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+async function assignBoardSelector(req, res, next) {
+  try {
+    await getSessionQuizForRequest(req, req.params.sessionId);
+    await req.app.locals.runtimeService.assignBoardSelector({
+      sessionId: req.params.sessionId,
+      playerId: req.body.playerId,
+    });
+    return res.status(204).send();
+  } catch (error) {
+    return next(error);
+  }
+}
+
+async function closeStakesWager(req, res, next) {
+  try {
+    await getSessionQuizForRequest(req, req.params.sessionId);
+    await req.app.locals.runtimeService.closeStakesWager({ sessionId: req.params.sessionId });
+    return res.status(204).send();
+  } catch (error) {
+    return next(error);
+  }
+}
+
 async function judgeAnswer(req, res, next) {
   try {
     await getSessionQuizForRequest(req, req.params.sessionId);
@@ -296,4 +333,7 @@ module.exports = {
   kickPlayer,
   updateAutoAdvance,
   deleteSession,
+  adjustScore,
+  assignBoardSelector,
+  closeStakesWager,
 };

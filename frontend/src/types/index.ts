@@ -4,10 +4,25 @@ export type SessionPhase = 'waiting' | 'open' | 'review' | 'finished'
 export type SessionStatus = 'lobby' | 'live' | 'finished'
 export type QuestionType = 'multiple_choice' | 'text'
 export type MediaType = 'none' | 'image' | 'audio' | 'video'
+export type SpecialType = 'normal' | 'cat_in_bag' | 'stakes'
+export type CatInBagPhase = 'selecting' | null
+export type StakesPhase = 'collecting' | 'answering' | null
 
 export interface QuestionOption {
   id: string
   text: string
+}
+
+export interface BoardTile {
+  id: number
+  points: number
+  specialType: SpecialType
+  columnName: string
+}
+
+export interface BoardColumn {
+  name: string
+  tiles: BoardTile[]
 }
 
 export interface Question {
@@ -24,6 +39,10 @@ export interface Question {
   points: number
   penaltyPoints: number
   correctAnswer?: string
+  correctAnswerMediaType?: MediaType
+  correctAnswerMediaUrl?: string
+  columnName: string
+  specialType: SpecialType
 }
 
 export interface LeaderboardEntry {
@@ -71,6 +90,16 @@ export interface SessionState {
     awardedPoints: number
   } | null
   viewerScore: number | null
+  // Board mode
+  boardSelectingPlayerId: number | null
+  boardAnsweredQuestionIds: number[]
+  boardColumns: BoardColumn[]
+  catInBagPhase: CatInBagPhase
+  catInBagTargetPlayerId: number | null
+  catInBagTargetName: string | null
+  stakesPhase: StakesPhase
+  stakesSelectedPlayerId: number | null
+  stakesSelectedName: string | null
 }
 
 export interface AdminPlayer {
@@ -81,6 +110,7 @@ export interface AdminPlayer {
   preferredLanguage: Language
   isConnected: boolean
   lastSeenAt: string | null
+  score: number
 }
 
 export interface AdminAnswer {
@@ -101,6 +131,10 @@ export interface AdminSessionState extends SessionState {
   answers: AdminAnswer[]
   buzzAttemptText: string
   activeBuzzPlayerId: number | null
+  stakesWagers: Record<number, number>
+  correctAnswer: string | null
+  correctAnswerMediaType: MediaType
+  correctAnswerMediaUrl: string
 }
 
 export interface QuizSummary {

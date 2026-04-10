@@ -29,12 +29,16 @@ function sanitizeQuestion(question, phase) {
     timeLimitSeconds: question.timeLimitSeconds,
     points: question.points,
     penaltyPoints: question.penaltyPoints,
+    columnName: question.columnName ?? '',
+    specialType: question.specialType ?? 'normal',
   };
 
   if (phase === 'review' || phase === 'finished') {
     return {
       ...base,
       correctAnswer: question.correctAnswer,
+      correctAnswerMediaType: question.correctAnswerMediaType ?? 'none',
+      correctAnswerMediaUrl: question.correctAnswerMediaUrl ?? '',
     };
   }
 

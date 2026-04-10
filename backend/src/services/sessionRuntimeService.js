@@ -29,6 +29,17 @@ class SessionRuntimeService {
       currentBuzzPlayerId: null,
       buzzAttemptText: '',
       deniedBuzzPlayerIds: new Set(),
+      // Board mode state
+      boardSelectingPlayerId: null,
+      lastSuccessfulPlayerId: null,
+      boardAnsweredQuestionIds: new Set(),
+      // Cat in the Bag
+      catInBagPhase: null,
+      catInBagTargetPlayerId: null,
+      // Stakes
+      stakesPhase: null,
+      stakesWagers: {},
+      stakesSelectedPlayerId: null,
     };
   }
 
@@ -69,6 +80,26 @@ class SessionRuntimeService {
     const session = await GameSession.findByPk(id);
     const state = this.createRuntimeState(session);
 
+    // Restore board answered questions from DB answers
+    if (session && session.status === 'live') {
+      const answers = await Answer.findAll({
+        where: { sessionId: id },
+        attributes: ['questionId'],
+      });
+      answers.forEach((a) => state.boardAnsweredQuestionIds.add(a.questionId));
+      // If current question is still open, don't count it as answered yet
+      if (session.phase === 'open' && session.currentQuestionIndex >= 0) {
+        const quiz = await Quiz.findByPk(session.quizId, {
+          include: [{ model: Question, as: 'questions' }],
+        });
+        if (quiz) {
+          quiz.questions.sort((a, b) => a.order - b.order);
+          const currentQ = quiz.questions[session.currentQuestionIndex];
+          if (currentQ) state.boardAnsweredQuestionIds.delete(currentQ.id);
+        }
+      }
+    }
+
     this.runtime.set(id, state);
     return state;
   }
@@ -90,10 +121,7 @@ class SessionRuntimeService {
   clearRuntimeState(sessionId) {
     const numericSessionId = Number(sessionId);
     const state = this.getState(numericSessionId);
-    if (!state) {
-      return;
-    }
-
+    if (!state) return;
     this.clearTimer(state);
     this.clearAutoAdvanceTimer(state);
     this.runtime.delete(numericSessionId);
@@ -115,10 +143,7 @@ class SessionRuntimeService {
   }
 
   getSecondsUntil(targetTime) {
-    if (!targetTime) {
-      return 0;
-    }
-
+    if (!targetTime) return 0;
     return Math.max(0, Math.ceil((new Date(targetTime).getTime() - Date.now()) / 1000));
   }
 
@@ -129,39 +154,32 @@ class SessionRuntimeService {
   }
 
   refreshQuestionRemaining(state) {
-    if (!state) {
-      return 0;
-    }
-
+    if (!state) return 0;
     if (state.closesAt) {
       state.questionRemainingSeconds = this.getSecondsUntil(state.closesAt);
     }
-
     return state.questionRemainingSeconds;
   }
 
   refreshAutoAdvanceRemaining(state) {
-    if (!state) {
-      return 0;
-    }
-
+    if (!state) return 0;
     if (state.autoAdvanceAt && !state.autoAdvancePaused) {
       state.autoAdvanceRemainingSeconds = this.getSecondsUntil(state.autoAdvanceAt);
     }
-
     return state.autoAdvanceRemainingSeconds;
   }
 
-  getNextAutoAction(session) {
-    if (
-      !session ||
-      session.status !== 'live' ||
-      session.phase !== 'review' ||
-      session.currentQuestionIndex < 0
-    ) {
-      return null;
+  getNextAutoAction(session, state) {
+    if (!session || session.status !== 'live' || session.currentQuestionIndex < 0) return null;
+
+    // Buzz mode: go back to board or finish
+    if (session.quiz?.mode === 'buzz' && session.phase === 'review') {
+      const totalQ = session.quiz.questions.length;
+      const answeredCount = state ? state.boardAnsweredQuestionIds.size : 0;
+      return answeredCount >= totalQ ? 'finish' : 'board';
     }
 
+    if (session.phase !== 'review') return null;
     return session.currentQuestionIndex < session.quiz.questions.length - 1 ? 'advance' : 'finish';
   }
 
@@ -179,7 +197,14 @@ class SessionRuntimeService {
     state.autoAdvanceTimer = setTimeout(() => {
       const currentState = this.getState(sessionId);
       if (!currentState?.autoAdvanceEnabled || currentState?.autoAdvancePaused) return;
-      const nextStep = action === 'finish' ? this.finishSession(sessionId) : this.advanceQuestion(sessionId);
+      let nextStep;
+      if (action === 'finish') {
+        nextStep = this.finishSession(sessionId);
+      } else if (action === 'board') {
+        nextStep = this.returnToBoard(sessionId);
+      } else {
+        nextStep = this.advanceQuestion(sessionId);
+      }
       nextStep.catch((error) => {
         console.error('Failed to auto-advance session', error);
       });
@@ -207,12 +232,7 @@ class SessionRuntimeService {
 
     this.refreshQuestionRemaining(state);
 
-    if (
-      !question ||
-      graph.status !== 'live' ||
-      graph.phase !== 'open' ||
-      graph.currentQuestionIndex < 0
-    ) {
+    if (!question || graph.status !== 'live' || graph.phase !== 'open' || graph.currentQuestionIndex < 0) {
       this.resetQuestionTimer(state);
       return;
     }
@@ -223,11 +243,7 @@ class SessionRuntimeService {
       return;
     }
 
-    if (
-      resetCountdown ||
-      !state.questionRemainingSeconds ||
-      state.questionRemainingSeconds < 1
-    ) {
+    if (resetCountdown || !state.questionRemainingSeconds || state.questionRemainingSeconds < 1) {
       state.questionRemainingSeconds = durationSeconds;
     }
 
@@ -250,7 +266,7 @@ class SessionRuntimeService {
   async syncAutoAdvance(sessionId, session = null, { resetCountdown = false } = {}) {
     const state = await this.ensureState(sessionId);
     const graph = session ?? (await this.getSessionGraph(sessionId));
-    const nextAction = this.getNextAutoAction(graph);
+    const nextAction = this.getNextAutoAction(graph, state);
 
     this.refreshAutoAdvanceRemaining(state);
 
@@ -274,12 +290,7 @@ class SessionRuntimeService {
     const actionChanged = state.autoAdvanceAction !== nextAction;
     state.autoAdvanceAction = nextAction;
 
-    if (
-      resetCountdown ||
-      actionChanged ||
-      !state.autoAdvanceRemainingSeconds ||
-      state.autoAdvanceRemainingSeconds < 1
-    ) {
+    if (resetCountdown || actionChanged || !state.autoAdvanceRemainingSeconds || state.autoAdvanceRemainingSeconds < 1) {
       state.autoAdvanceRemainingSeconds = state.autoAdvanceDurationSeconds;
     }
 
@@ -322,9 +333,7 @@ class SessionRuntimeService {
       ],
     });
 
-    if (!session) {
-      throw new Error('Session not found');
-    }
+    if (!session) throw new Error('Session not found');
 
     session.quiz.questions.sort((left, right) => left.order - right.order);
     session.players.sort((left, right) => left.createdAt - right.createdAt);
@@ -363,9 +372,7 @@ class SessionRuntimeService {
   }
 
   createQuestionReview(session, question) {
-    if (!question) {
-      return [];
-    }
+    if (!question) return [];
 
     return session.answers
       .filter((answer) => answer.questionId === question.id)
@@ -386,6 +393,31 @@ class SessionRuntimeService {
       }));
   }
 
+  buildBoardColumns(questions) {
+    const columnMap = new Map();
+
+    for (const q of questions) {
+      const col = q.columnName || 'General';
+      if (!columnMap.has(col)) columnMap.set(col, []);
+      columnMap.get(col).push({
+        id: q.id,
+        points: q.points,
+        specialType: q.specialType || 'normal',
+        columnName: col,
+      });
+    }
+
+    const columns = [];
+    for (const [name, tiles] of columnMap) {
+      columns.push({
+        name,
+        tiles: tiles.sort((a, b) => a.points - b.points),
+      });
+    }
+
+    return columns;
+  }
+
   buildPublicStateFromGraph(session, viewerPlayerId = null) {
     const state = this.getState(session.id) ?? this.createRuntimeState(session);
     this.refreshQuestionRemaining(state);
@@ -399,6 +431,12 @@ class SessionRuntimeService {
       : null;
     const buzzPlayer = state.currentBuzzPlayerId
       ? session.players.find((player) => player.id === state.currentBuzzPlayerId) ?? null
+      : null;
+    const catInBagTargetPlayer = state.catInBagTargetPlayerId
+      ? session.players.find((p) => p.id === state.catInBagTargetPlayerId) ?? null
+      : null;
+    const stakesSelectedPlayer = state.stakesSelectedPlayerId
+      ? session.players.find((p) => p.id === state.stakesSelectedPlayerId) ?? null
       : null;
 
     return {
@@ -435,10 +473,7 @@ class SessionRuntimeService {
       answerCount: currentAnswers.length,
       leaderboard: this.createLeaderboard(session),
       lockedBuzzPlayer: buzzPlayer
-        ? {
-            playerId: buzzPlayer.id,
-            displayName: buzzPlayer.displayName,
-          }
+        ? { playerId: buzzPlayer.id, displayName: buzzPlayer.displayName }
         : null,
       deniedBuzzPlayerIds: Array.from(state.deniedBuzzPlayerIds),
       viewerAnswer: viewerAnswer
@@ -453,12 +488,23 @@ class SessionRuntimeService {
         viewerPlayerId != null
           ? session.scores.find((score) => score.playerId === Number(viewerPlayerId))?.points ?? 0
           : null,
+      // Board mode fields
+      boardSelectingPlayerId: state.boardSelectingPlayerId,
+      boardAnsweredQuestionIds: Array.from(state.boardAnsweredQuestionIds),
+      boardColumns: session.quiz.mode === 'buzz' ? this.buildBoardColumns(session.quiz.questions) : [],
+      catInBagPhase: state.catInBagPhase,
+      catInBagTargetPlayerId: state.catInBagTargetPlayerId,
+      catInBagTargetName: catInBagTargetPlayer?.displayName ?? null,
+      stakesPhase: state.stakesPhase,
+      stakesSelectedPlayerId: state.stakesSelectedPlayerId,
+      stakesSelectedName: stakesSelectedPlayer?.displayName ?? null,
     };
   }
 
   buildAdminStateFromGraph(session) {
     const state = this.getState(session.id) ?? this.createRuntimeState(session);
     const question = session.quiz.questions[session.currentQuestionIndex] ?? null;
+    const scoreMap = new Map(session.scores.map((s) => [s.playerId, s.points]));
 
     return {
       ...this.buildPublicStateFromGraph(session),
@@ -470,17 +516,20 @@ class SessionRuntimeService {
         preferredLanguage: player.preferredLanguage,
         isConnected: player.isConnected,
         lastSeenAt: player.lastSeenAt,
+        score: scoreMap.get(player.id) ?? 0,
       })),
       answers: this.createQuestionReview(session, question),
       buzzAttemptText: state.buzzAttemptText,
       activeBuzzPlayerId: state.currentBuzzPlayerId,
+      stakesWagers: state.stakesWagers,
+      correctAnswer: question ? question.correctAnswer : null,
+      correctAnswerMediaType: question ? (question.correctAnswerMediaType || 'none') : 'none',
+      correctAnswerMediaUrl: question ? (question.correctAnswerMediaUrl || '') : '',
     };
   }
 
   async emitState(sessionId) {
-    if (!this.io) {
-      return;
-    }
+    if (!this.io) return;
 
     const session = await this.getSessionGraph(sessionId);
     const publicState = this.buildPublicStateFromGraph(session);
@@ -490,6 +539,11 @@ class SessionRuntimeService {
     this.io.to(this.getAdminRoom(sessionId)).emit('admin:state', adminState);
     this.io.to(this.getRoom(sessionId)).emit('leaderboard:update', publicState.leaderboard);
     this.io.to(this.getAdminRoom(sessionId)).emit('leaderboard:update', publicState.leaderboard);
+  }
+
+  emitAdminBuzzText(sessionId, playerId, text) {
+    if (!this.io) return;
+    this.io.to(this.getAdminRoom(sessionId)).emit('admin:buzz-text', { playerId, text });
   }
 
   async getOrCreateScore(sessionId, playerId) {
@@ -509,9 +563,7 @@ class SessionRuntimeService {
 
   async createSession(quizId) {
     const quiz = await Quiz.findByPk(quizId);
-    if (!quiz) {
-      throw new Error('Quiz not found');
-    }
+    if (!quiz) throw new Error('Quiz not found');
 
     const joinCode = await this.ensureJoinCode();
     const session = await GameSession.create({
@@ -528,21 +580,10 @@ class SessionRuntimeService {
 
   async listPublicSessions() {
     const sessions = await GameSession.findAll({
-      where: {
-        status: {
-          [Op.ne]: 'finished',
-        },
-      },
+      where: { status: { [Op.ne]: 'finished' } },
       include: [
-        {
-          model: Quiz,
-          as: 'quiz',
-          include: [{ model: Question, as: 'questions' }],
-        },
-        {
-          model: Player,
-          as: 'players',
-        },
+        { model: Quiz, as: 'quiz', include: [{ model: Question, as: 'questions' }] },
+        { model: Player, as: 'players' },
       ],
       order: [['createdAt', 'DESC']],
     });
@@ -555,16 +596,11 @@ class SessionRuntimeService {
 
   async joinPlayer({ joinCode, displayName, avatar, preferredLanguage }) {
     const session = await GameSession.findOne({
-      where: {
-        joinCode: joinCode.toUpperCase(),
-        status: { [Op.ne]: 'finished' },
-      },
+      where: { joinCode: joinCode.toUpperCase(), status: { [Op.ne]: 'finished' } },
       include: [{ model: Quiz, as: 'quiz' }],
     });
 
-    if (!session) {
-      throw new Error('Active session not found');
-    }
+    if (!session) throw new Error('Active session not found');
 
     const player = await Player.create({
       sessionId: session.id,
@@ -586,24 +622,14 @@ class SessionRuntimeService {
   }
 
   async rejoinPlayer({ joinCode, playerCode }) {
-    const session = await GameSession.findOne({
-      where: { joinCode: joinCode.toUpperCase() },
-    });
-
-    if (!session) {
-      throw new Error('Session not found');
-    }
+    const session = await GameSession.findOne({ where: { joinCode: joinCode.toUpperCase() } });
+    if (!session) throw new Error('Session not found');
 
     const player = await Player.findOne({
-      where: {
-        sessionId: session.id,
-        rejoinCode: playerCode.trim(),
-      },
+      where: { sessionId: session.id, rejoinCode: playerCode.trim() },
     });
 
-    if (!player) {
-      throw new Error('Player code is invalid');
-    }
+    if (!player) throw new Error('Player code is invalid');
 
     player.isConnected = true;
     player.lastSeenAt = new Date();
@@ -620,9 +646,7 @@ class SessionRuntimeService {
 
   async attachPlayerSocket(sessionId, playerId, socketId) {
     const player = await Player.findOne({ where: { id: playerId, sessionId } });
-    if (!player) {
-      throw new Error('Player not found');
-    }
+    if (!player) throw new Error('Player not found');
 
     player.socketId = socketId;
     player.isConnected = true;
@@ -634,9 +658,7 @@ class SessionRuntimeService {
 
   async disconnectPlayer(socketId) {
     const player = await Player.findOne({ where: { socketId } });
-    if (!player) {
-      return;
-    }
+    if (!player) return;
 
     player.isConnected = false;
     player.lastSeenAt = new Date();
@@ -650,9 +672,7 @@ class SessionRuntimeService {
     const state = await this.ensureState(sessionId);
     const question = session.quiz.questions[questionIndex] ?? null;
 
-    if (!question) {
-      throw new Error('Question not found');
-    }
+    if (!question) throw new Error('Question not found');
 
     session.status = 'live';
     session.phase = 'open';
@@ -669,8 +689,28 @@ class SessionRuntimeService {
     state.currentBuzzPlayerId = null;
     state.buzzAttemptText = '';
     state.deniedBuzzPlayerIds = new Set();
-    await this.syncQuestionTimer(sessionId, session, { resetCountdown: true });
 
+    // Board mode: set up special question phases
+    const specialType = question.specialType || 'normal';
+    if (session.quiz.mode === 'buzz' && specialType === 'cat_in_bag') {
+      state.catInBagPhase = 'selecting';
+      state.catInBagTargetPlayerId = null;
+    } else {
+      state.catInBagPhase = null;
+      state.catInBagTargetPlayerId = null;
+    }
+
+    if (session.quiz.mode === 'buzz' && specialType === 'stakes') {
+      state.stakesPhase = 'collecting';
+      state.stakesWagers = {};
+      state.stakesSelectedPlayerId = null;
+    } else {
+      state.stakesPhase = null;
+      state.stakesWagers = {};
+      state.stakesSelectedPlayerId = null;
+    }
+
+    await this.syncQuestionTimer(sessionId, session, { resetCountdown: true });
     await this.emitState(sessionId);
     return this.getSessionGraph(sessionId);
   }
@@ -678,10 +718,19 @@ class SessionRuntimeService {
   async advanceQuestion(sessionId) {
     const session = await this.getSessionGraph(sessionId);
 
-    if (session.phase === 'open') {
-      throw new Error('Close the current question first');
+    if (session.phase === 'open') throw new Error('Close the current question first');
+
+    // Buzz mode: go back to board or finish
+    if (session.quiz.mode === 'buzz') {
+      const state = await this.ensureState(sessionId);
+      const totalQ = session.quiz.questions.length;
+      if (state.boardAnsweredQuestionIds.size >= totalQ) {
+        return this.finishSession(sessionId);
+      }
+      return this.returnToBoard(sessionId, session);
     }
 
+    // Classic mode: sequential advance
     const nextIndex = session.currentQuestionIndex + 1;
     if (nextIndex >= session.quiz.questions.length) {
       return this.finishSession(sessionId);
@@ -690,42 +739,60 @@ class SessionRuntimeService {
     return this.startQuestion(sessionId, nextIndex);
   }
 
+  async returnToBoard(sessionId, session = null) {
+    const graph = session ?? (await this.getSessionGraph(sessionId));
+    const state = await this.ensureState(sessionId);
+
+    this.clearTimer(state);
+    this.clearAutoAdvanceTimer(state);
+    this.resetAutoAdvanceSchedule(state);
+
+    state.phase = 'waiting';
+    state.currentBuzzPlayerId = null;
+    state.buzzAttemptText = '';
+    state.catInBagPhase = null;
+    state.catInBagTargetPlayerId = null;
+    state.stakesPhase = null;
+    state.stakesWagers = {};
+    state.stakesSelectedPlayerId = null;
+
+    graph.status = 'live';
+    graph.phase = 'waiting';
+    graph.startedAt = graph.startedAt ?? new Date();
+    await graph.save();
+
+    await this.emitState(sessionId);
+    return this.getSessionGraph(sessionId);
+  }
+
   async closeActiveQuestion(sessionId) {
     const session = await this.getSessionGraph(sessionId);
     const state = await this.ensureState(sessionId);
 
-    if (session.phase !== 'open') {
-      return session;
-    }
+    if (session.phase !== 'open') return session;
 
     const question = session.quiz.questions[session.currentQuestionIndex] ?? null;
-    if (!question) {
-      throw new Error('No question is currently active');
-    }
+    if (!question) throw new Error('No question is currently active');
 
     this.resetQuestionTimer(state);
     state.currentBuzzPlayerId = null;
     state.buzzAttemptText = '';
 
+    // Mark the question as answered on the board
+    if (session.quiz.mode === 'buzz') {
+      state.boardAnsweredQuestionIds.add(question.id);
+    }
+
     if (session.quiz.mode === 'classic' && question.type === 'multiple_choice') {
-      const answers = await Answer.findAll({
-        where: {
-          sessionId,
-          questionId: question.id,
-        },
-      });
+      const answers = await Answer.findAll({ where: { sessionId, questionId: question.id } });
 
       for (const answer of answers) {
-        if (answer.status === 'judged') {
-          continue;
-        }
-
+        if (answer.status === 'judged') continue;
         const isCorrect = normalizeAnswer(answer.submittedAnswer) === normalizeAnswer(question.correctAnswer);
         answer.isCorrect = isCorrect;
         answer.awardedPoints = isCorrect ? question.points : 0;
         answer.status = 'judged';
         await answer.save();
-
         if (isCorrect) {
           await this.applyScoreDelta(sessionId, answer.playerId, question.points);
         }
@@ -743,9 +810,7 @@ class SessionRuntimeService {
 
   async finishSession(sessionId) {
     const session = await GameSession.findByPk(sessionId);
-    if (!session) {
-      throw new Error('Session not found');
-    }
+    if (!session) throw new Error('Session not found');
 
     const state = await this.ensureState(sessionId);
     this.clearTimer(state);
@@ -772,18 +837,12 @@ class SessionRuntimeService {
 
   async replayQuestion(sessionId) {
     const session = await this.getSessionGraph(sessionId);
+    const state = await this.ensureState(sessionId);
     const question = session.quiz.questions[session.currentQuestionIndex] ?? null;
 
-    if (!question) {
-      throw new Error('There is no previous question to replay');
-    }
+    if (!question) throw new Error('There is no previous question to replay');
 
-    const answers = await Answer.findAll({
-      where: {
-        sessionId,
-        questionId: question.id,
-      },
-    });
+    const answers = await Answer.findAll({ where: { sessionId, questionId: question.id } });
 
     for (const answer of answers) {
       if (answer.awardedPoints !== 0) {
@@ -791,12 +850,10 @@ class SessionRuntimeService {
       }
     }
 
-    await Answer.destroy({
-      where: {
-        sessionId,
-        questionId: question.id,
-      },
-    });
+    await Answer.destroy({ where: { sessionId, questionId: question.id } });
+
+    // Remove from answered set
+    state.boardAnsweredQuestionIds.delete(question.id);
 
     return this.startQuestion(sessionId, session.currentQuestionIndex);
   }
@@ -810,15 +867,8 @@ class SessionRuntimeService {
     }
 
     const [answer] = await Answer.findOrCreate({
-      where: {
-        sessionId,
-        playerId,
-        questionId: question.id,
-      },
-      defaults: {
-        submittedAnswer: value,
-        submittedAt: new Date(),
-      },
+      where: { sessionId, playerId, questionId: question.id },
+      defaults: { submittedAnswer: value, submittedAt: new Date() },
     });
 
     answer.submittedAnswer = value;
@@ -841,27 +891,32 @@ class SessionRuntimeService {
       throw new Error('No buzz question is open');
     }
 
-    if (state.currentBuzzPlayerId) {
-      throw new Error('Another player already has the buzz');
+    // Stakes mode: only the selected player can buzz
+    if (state.stakesPhase === 'answering' && state.stakesSelectedPlayerId !== Number(playerId)) {
+      throw new Error('Only the selected player can answer this question');
     }
+
+    // CiB: only the target player can buzz
+    if (state.catInBagPhase === null && state.catInBagTargetPlayerId !== null) {
+      if (state.catInBagTargetPlayerId !== Number(playerId)) {
+        throw new Error('Only the assigned player can answer this question');
+      }
+    }
+
+    if (state.catInBagPhase === 'selecting') {
+      throw new Error('Waiting for Cat in the Bag assignment');
+    }
+
+    if (state.currentBuzzPlayerId) throw new Error('Another player already has the buzz');
 
     if (state.deniedBuzzPlayerIds.has(Number(playerId))) {
       throw new Error('This player cannot buzz again on the current question');
     }
 
-    const currentAnswers = await Answer.count({
-      where: { sessionId, questionId: question.id },
-    });
+    const currentAnswers = await Answer.count({ where: { sessionId, questionId: question.id } });
     const [answer] = await Answer.findOrCreate({
-      where: {
-        sessionId,
-        playerId,
-        questionId: question.id,
-      },
-      defaults: {
-        buzzOrder: currentAnswers + 1,
-        submittedAt: new Date(),
-      },
+      where: { sessionId, playerId, questionId: question.id },
+      defaults: { buzzOrder: currentAnswers + 1, submittedAt: new Date() },
     });
 
     answer.buzzOrder = answer.buzzOrder ?? currentAnswers + 1;
@@ -873,6 +928,18 @@ class SessionRuntimeService {
     await this.emitState(sessionId);
 
     return answer;
+  }
+
+  async updateBuzzAnswerLive({ sessionId, playerId, text }) {
+    const session = await this.getSessionGraph(sessionId);
+    const state = await this.ensureState(sessionId);
+
+    if (session.phase !== 'open' || session.quiz.mode !== 'buzz') return;
+    if (state.currentBuzzPlayerId !== Number(playerId)) return;
+
+    state.buzzAttemptText = text;
+    // Emit lightweight update to admin room only
+    this.emitAdminBuzzText(sessionId, playerId, text);
   }
 
   async submitBuzzAttempt({ sessionId, playerId, value }) {
@@ -889,14 +956,8 @@ class SessionRuntimeService {
     }
 
     const [answer] = await Answer.findOrCreate({
-      where: {
-        sessionId,
-        playerId,
-        questionId: question.id,
-      },
-      defaults: {
-        submittedAt: new Date(),
-      },
+      where: { sessionId, playerId, questionId: question.id },
+      defaults: { submittedAt: new Date() },
     });
 
     answer.submittedAnswer = value;
@@ -916,9 +977,7 @@ class SessionRuntimeService {
       include: [{ model: Question, as: 'question' }],
     });
 
-    if (!answer) {
-      throw new Error('Answer not found');
-    }
+    if (!answer) throw new Error('Answer not found');
 
     const targetPoints = isCorrect ? answer.question.points : 0;
     const delta = targetPoints - answer.awardedPoints;
@@ -946,14 +1005,8 @@ class SessionRuntimeService {
     }
 
     const [answer] = await Answer.findOrCreate({
-      where: {
-        sessionId,
-        playerId: state.currentBuzzPlayerId,
-        questionId: question.id,
-      },
-      defaults: {
-        submittedAt: new Date(),
-      },
+      where: { sessionId, playerId: state.currentBuzzPlayerId, questionId: question.id },
+      defaults: { submittedAt: new Date() },
     });
 
     if (isCorrect) {
@@ -962,6 +1015,11 @@ class SessionRuntimeService {
       answer.awardedPoints = question.points;
       await answer.save();
       await this.applyScoreDelta(sessionId, state.currentBuzzPlayerId, question.points);
+
+      // Update board selector to the winner
+      state.lastSuccessfulPlayerId = state.currentBuzzPlayerId;
+      state.boardSelectingPlayerId = state.currentBuzzPlayerId;
+      state.boardAnsweredQuestionIds.add(question.id);
 
       this.resetQuestionTimer(state);
       this.resetAutoAdvanceSchedule(state);
@@ -992,18 +1050,145 @@ class SessionRuntimeService {
     return answer;
   }
 
+  // Board mode: player selects a question tile
+  async selectBoardQuestion({ sessionId, playerId, questionId }) {
+    const session = await this.getSessionGraph(sessionId);
+    const state = await this.ensureState(sessionId);
+
+    if (session.status !== 'live' || session.phase !== 'waiting') {
+      throw new Error('Not in board selection phase');
+    }
+
+    if (session.quiz.mode !== 'buzz') {
+      throw new Error('Board selection is only available in buzz mode');
+    }
+
+    if (state.boardSelectingPlayerId !== Number(playerId)) {
+      throw new Error('It is not your turn to select a question');
+    }
+
+    if (state.boardAnsweredQuestionIds.has(Number(questionId))) {
+      throw new Error('This question has already been answered');
+    }
+
+    const questionIndex = session.quiz.questions.findIndex((q) => q.id === Number(questionId));
+    if (questionIndex === -1) throw new Error('Question not found');
+
+    return this.startQuestion(sessionId, questionIndex);
+  }
+
+  // Admin assigns who selects the next board question
+  async assignBoardSelector({ sessionId, playerId }) {
+    const state = await this.ensureState(sessionId);
+    const session = await this.getSessionGraph(sessionId);
+
+    const player = session.players.find((p) => p.id === Number(playerId));
+    if (!player) throw new Error('Player not found');
+
+    state.boardSelectingPlayerId = Number(playerId);
+    await this.emitState(sessionId);
+  }
+
+  // Manual score adjustment by admin
+  async adjustPlayerScore({ sessionId, playerId, delta }) {
+    const parsedDelta = Number(delta);
+    if (!Number.isFinite(parsedDelta) || Math.abs(parsedDelta) > 100000) {
+      throw new Error('Invalid score adjustment value');
+    }
+
+    const player = await Player.findOne({ where: { id: playerId, sessionId } });
+    if (!player) throw new Error('Player not found');
+
+    await this.applyScoreDelta(sessionId, playerId, parsedDelta);
+    await this.emitState(sessionId);
+    return this.getOrCreateScore(sessionId, playerId);
+  }
+
+  // Cat in the Bag: current selector assigns question to another player
+  async assignCatInBag({ sessionId, assigningPlayerId, targetPlayerId }) {
+    const session = await this.getSessionGraph(sessionId);
+    const state = await this.ensureState(sessionId);
+
+    if (session.phase !== 'open' || session.quiz.mode !== 'buzz') {
+      throw new Error('No buzz question is open');
+    }
+
+    if (state.catInBagPhase !== 'selecting') {
+      throw new Error('Not in Cat in the Bag selection phase');
+    }
+
+    if (state.boardSelectingPlayerId !== Number(assigningPlayerId)) {
+      throw new Error('Only the current selector can assign Cat in the Bag');
+    }
+
+    const target = session.players.find((p) => p.id === Number(targetPlayerId));
+    if (!target) throw new Error('Target player not found');
+
+    state.catInBagPhase = null;
+    state.catInBagTargetPlayerId = Number(targetPlayerId);
+
+    await this.emitState(sessionId);
+  }
+
+  // Stakes: player submits a wager
+  async submitStakesWager({ sessionId, playerId, wager }) {
+    const session = await this.getSessionGraph(sessionId);
+    const state = await this.ensureState(sessionId);
+
+    if (session.phase !== 'open' || session.quiz.mode !== 'buzz') {
+      throw new Error('No buzz question is open');
+    }
+
+    if (state.stakesPhase !== 'collecting') {
+      throw new Error('Not in stakes wager collection phase');
+    }
+
+    const parsedWager = Number(wager);
+    if (!Number.isFinite(parsedWager) || parsedWager < 0) {
+      throw new Error('Invalid wager amount');
+    }
+
+    const playerScore = session.scores.find((s) => s.playerId === Number(playerId))?.points ?? 0;
+    const maxWager = Math.max(playerScore, 0);
+    const safeWager = Math.min(parsedWager, maxWager);
+
+    state.stakesWagers[Number(playerId)] = safeWager;
+    await this.emitState(sessionId);
+  }
+
+  // Admin closes stakes wager collection and selects highest bidder
+  async closeStakesWager({ sessionId }) {
+    const state = await this.ensureState(sessionId);
+
+    if (state.stakesPhase !== 'collecting') {
+      throw new Error('Not in stakes wager collection phase');
+    }
+
+    // Find highest wagerer
+    let maxWager = -1;
+    let selectedPlayerId = null;
+
+    for (const [pid, amount] of Object.entries(state.stakesWagers)) {
+      if (amount > maxWager) {
+        maxWager = amount;
+        selectedPlayerId = Number(pid);
+      }
+    }
+
+    if (selectedPlayerId === null) {
+      throw new Error('No wagers submitted');
+    }
+
+    state.stakesPhase = 'answering';
+    state.stakesSelectedPlayerId = selectedPlayerId;
+    await this.emitState(sessionId);
+  }
+
   async kickPlayer(sessionId, playerId) {
     const state = await this.ensureState(sessionId);
-    const player = await Player.findOne({
-      where: {
-        id: playerId,
-        sessionId,
-      },
-    });
+    const player = await Player.findOne({ where: { id: playerId, sessionId } });
 
-    if (!player) {
-      throw new Error('Player not found');
-    }
+    if (!player) throw new Error('Player not found');
 
     if (player.socketId && this.io) {
       this.io.to(player.socketId).emit('player:kicked', { sessionId, playerId });
@@ -1014,18 +1199,12 @@ class SessionRuntimeService {
       state.buzzAttemptText = '';
     }
 
-    await Answer.destroy({
-      where: {
-        sessionId,
-        playerId,
-      },
-    });
-    await Score.destroy({
-      where: {
-        sessionId,
-        playerId,
-      },
-    });
+    if (state.boardSelectingPlayerId === Number(playerId)) {
+      state.boardSelectingPlayerId = null;
+    }
+
+    await Answer.destroy({ where: { sessionId, playerId } });
+    await Score.destroy({ where: { sessionId, playerId } });
     await player.destroy();
     await this.emitState(sessionId);
   }
@@ -1041,16 +1220,14 @@ class SessionRuntimeService {
       parsedDuration !== state.autoAdvanceDurationSeconds;
 
     const parsedAnswerDuration = Number(answerDurationSeconds);
-    const nextAnswerDuration = Number.isFinite(parsedAnswerDuration) && parsedAnswerDuration > 0
-      ? Math.max(1, Math.round(parsedAnswerDuration))
-      : null;
+    const nextAnswerDuration =
+      Number.isFinite(parsedAnswerDuration) && parsedAnswerDuration > 0
+        ? Math.max(1, Math.round(parsedAnswerDuration))
+        : null;
     const hasAnswerDurationChange =
-      nextAnswerDuration != null &&
-      nextAnswerDuration !== state.sessionAnswerDurationSeconds;
+      nextAnswerDuration != null && nextAnswerDuration !== state.sessionAnswerDurationSeconds;
 
-    if (hasAnswerDurationChange) {
-      state.sessionAnswerDurationSeconds = nextAnswerDuration;
-    }
+    if (hasAnswerDurationChange) state.sessionAnswerDurationSeconds = nextAnswerDuration;
 
     if (hasDurationChange) {
       state.autoAdvanceDurationSeconds = Math.max(1, Math.round(parsedDuration));
@@ -1089,37 +1266,23 @@ class SessionRuntimeService {
 
   async deleteSession(sessionId) {
     const session = await GameSession.findByPk(sessionId);
-    if (!session) {
-      throw new Error('Session not found');
-    }
+    if (!session) throw new Error('Session not found');
 
     this.clearRuntimeState(sessionId);
     await session.destroy();
   }
 
   async deleteSessionsForQuiz(quizId) {
-    const sessions = await GameSession.findAll({
-      where: { quizId },
-      attributes: ['id'],
-    });
-
+    const sessions = await GameSession.findAll({ where: { quizId }, attributes: ['id'] });
     for (const session of sessions) {
       this.clearRuntimeState(session.id);
     }
-
-    await GameSession.destroy({
-      where: { quizId },
-    });
+    await GameSession.destroy({ where: { quizId } });
   }
 
   async getSessionByJoinCode(joinCode, viewerPlayerId = null) {
-    const session = await GameSession.findOne({
-      where: { joinCode: joinCode.toUpperCase() },
-    });
-
-    if (!session) {
-      throw new Error('Session not found');
-    }
+    const session = await GameSession.findOne({ where: { joinCode: joinCode.toUpperCase() } });
+    if (!session) throw new Error('Session not found');
 
     const graph = await this.getSessionGraph(session.id);
     await this.ensureState(graph.id);
@@ -1133,6 +1296,4 @@ class SessionRuntimeService {
   }
 }
 
-module.exports = {
-  SessionRuntimeService,
-};
+module.exports = { SessionRuntimeService };

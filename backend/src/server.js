@@ -20,6 +20,25 @@ const userRoutes = require('./routes/userRoutes');
 const { getMaxUploadSizeMb } = require('./config/uploadConfig');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 
+async function ensureQuestionColumns() {
+  const queryInterface = sequelize.getQueryInterface();
+  const table = await queryInterface.describeTable('questions').catch(() => null);
+  if (!table) return;
+
+  const adds = [
+    ['columnName', { type: DataTypes.STRING, allowNull: true, defaultValue: '' }],
+    ['specialType', { type: DataTypes.STRING, allowNull: true, defaultValue: 'normal' }],
+    ['correctAnswerMediaType', { type: DataTypes.STRING, allowNull: true, defaultValue: 'none' }],
+    ['correctAnswerMediaUrl', { type: DataTypes.STRING, allowNull: true, defaultValue: '' }],
+  ];
+
+  for (const [col, def] of adds) {
+    if (!table[col]) {
+      await queryInterface.addColumn('questions', col, def);
+    }
+  }
+}
+
 async function ensureQuizStorageColumn() {
   const queryInterface = sequelize.getQueryInterface();
   const quizTable = await queryInterface.describeTable('quizzes').catch(() => null);
@@ -50,6 +69,7 @@ async function startServer() {
 
   await sequelize.sync();
   await ensureQuizStorageColumn();
+  await ensureQuestionColumns();
   await ensureDefaultData();
   await ensureAllQuizStorage();
 

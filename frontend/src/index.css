@@ -1681,3 +1681,286 @@ select:focus {
     min-width: 0;
   }
 }
+
+/* ─── Leaderboard player info spacing ─── */
+.leaderboard-player-info {
+  display: grid;
+  gap: 0.12rem;
+}
+
+.player-status {
+  font-size: 0.82rem;
+}
+
+.player-status.online {
+  color: var(--success);
+}
+
+.player-status.away {
+  color: var(--muted);
+}
+
+/* ─── Admin modal / popup ─── */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(36, 21, 51, 0.48);
+  backdrop-filter: blur(6px);
+  z-index: 200;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.modal-panel {
+  background: var(--panel-strong);
+  border: 1px solid var(--border);
+  border-radius: 1.75rem;
+  box-shadow: 0 32px 80px rgba(97, 61, 143, 0.22);
+  padding: 2rem;
+  max-width: 38rem;
+  width: 100%;
+  display: grid;
+  gap: 1.25rem;
+  animation: rise 200ms ease;
+}
+
+/* ─── Correct answer box ─── */
+.correct-answer-box {
+  display: grid;
+  gap: 0.5rem;
+  padding: 1rem 1.05rem;
+  border-radius: 1rem;
+  border: 1px solid rgba(29, 157, 104, 0.22);
+  background: linear-gradient(135deg, rgba(29, 157, 104, 0.1), rgba(255, 255, 255, 0.88));
+}
+
+.correct-answer-text {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #0f6c49;
+}
+
+/* ─── Buzz live text ─── */
+.buzz-live-text-box {
+  display: grid;
+  gap: 0.5rem;
+  padding: 1rem;
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.76);
+  border: 1px solid rgba(36, 21, 51, 0.08);
+  min-height: 5rem;
+}
+
+.buzz-live-text {
+  font-size: 1.1rem;
+  min-height: 2rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ─── Board status bar ─── */
+.board-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.85rem;
+  padding: 0.85rem 1rem;
+  border-radius: 1rem;
+  border: 1px solid rgba(36, 21, 51, 0.08);
+  background: rgba(255, 255, 255, 0.78);
+}
+
+/* ─── Score adjustment ─── */
+.score-adjust-row {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.score-adjust-input {
+  width: 7rem;
+  min-height: 2.2rem;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.88rem;
+}
+
+/* ─── Stakes wager list ─── */
+.stakes-wager-list {
+  display: grid;
+  gap: 0.4rem;
+  margin-bottom: 0.75rem;
+  padding: 0.75rem;
+  border-radius: 1rem;
+  background: rgba(255, 179, 71, 0.08);
+  border: 1px solid rgba(255, 179, 71, 0.2);
+}
+
+.stakes-wager-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.3rem 0.2rem;
+  border-bottom: 1px solid rgba(36, 21, 51, 0.06);
+  font-size: 0.9rem;
+}
+
+.stakes-wager-row:last-child {
+  border-bottom: none;
+}
+
+/* ─── Buzz board (Jeopardy-style) ─── */
+.buzz-board {
+  display: grid;
+  gap: 1rem;
+}
+
+.buzz-board-columns {
+  display: grid;
+  gap: 0.55rem;
+  overflow-x: auto;
+}
+
+.buzz-board-column {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.buzz-board-col-header {
+  text-align: center;
+  font-weight: 800;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.65rem 0.5rem;
+  border-radius: 0.9rem;
+  color: white;
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+}
+
+.board-tile {
+  display: grid;
+  place-items: center;
+  min-height: 3.75rem;
+  border-radius: 1rem;
+  font-weight: 800;
+  font-size: 1.15rem;
+  border: 2px solid transparent;
+  background: linear-gradient(135deg, rgba(63, 183, 161, 0.15), rgba(255, 255, 255, 0.88));
+  border-color: rgba(63, 183, 161, 0.22);
+  cursor: default;
+  transition: transform 140ms ease, box-shadow 140ms ease, background 140ms ease;
+  position: relative;
+  gap: 0.2rem;
+}
+
+.board-tile.selectable {
+  cursor: pointer;
+  background: linear-gradient(135deg, rgba(255, 179, 71, 0.2), rgba(255, 255, 255, 0.92));
+  border-color: rgba(255, 179, 71, 0.4);
+}
+
+.board-tile.selectable:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 24px rgba(255, 179, 71, 0.22);
+  background: linear-gradient(135deg, rgba(255, 179, 71, 0.3), rgba(255, 255, 255, 0.96));
+}
+
+.board-tile.answered {
+  opacity: 0.38;
+  cursor: not-allowed;
+  background: rgba(255, 255, 255, 0.5);
+  border-color: rgba(36, 21, 51, 0.06);
+}
+
+.board-tile-points {
+  color: var(--ink);
+  font-size: 1.2rem;
+}
+
+.board-tile-done {
+  font-size: 1rem;
+  color: var(--muted);
+}
+
+.board-tile-badge {
+  position: absolute;
+  top: 0.3rem;
+  right: 0.35rem;
+  font-size: 0.65rem;
+  font-weight: 900;
+  padding: 0.15rem 0.35rem;
+  border-radius: 999px;
+}
+
+.board-tile-badge.cib {
+  background: rgba(97, 61, 143, 0.18);
+  color: #6137a0;
+}
+
+.board-tile-badge.stakes {
+  background: rgba(255, 179, 71, 0.25);
+  color: #b07700;
+}
+
+.board-selector-hint {
+  text-align: center;
+  font-size: 0.92rem;
+  color: var(--muted);
+  padding: 0.5rem;
+}
+
+.board-selector-you {
+  color: var(--accent-strong);
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+/* ─── Special phase panels (CiB, Stakes) ─── */
+.special-phase-panel {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1.1rem;
+  border-radius: 1.25rem;
+  border: 1px solid rgba(97, 61, 143, 0.18);
+  background: linear-gradient(135deg, rgba(97, 61, 143, 0.08), rgba(255, 255, 255, 0.88));
+}
+
+.cib-player-grid {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
+}
+
+.cib-player-btn {
+  font-size: 0.92rem;
+  padding: 0.65rem 0.9rem;
+  min-height: auto;
+}
+
+/* ─── Admin session layout: 4 sections ─── */
+.admin-session-layout {
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+}
+
+@media (max-width: 900px) {
+  .admin-session-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Responsive board */
+@media (max-width: 640px) {
+  .buzz-board-columns {
+    gap: 0.35rem;
+  }
+  .board-tile {
+    min-height: 3rem;
+    font-size: 1rem;
+  }
+  .buzz-board-col-header {
+    font-size: 0.72rem;
+    padding: 0.5rem 0.3rem;
+  }
+}

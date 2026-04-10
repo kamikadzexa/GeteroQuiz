@@ -27,10 +27,7 @@ function registerSocketHandlers(io, runtimeService) {
           throw new Error('Your account does not have access yet');
         }
         await getSessionQuizForRequest(
-          {
-            headers: { 'x-quiz-pin': payload.quizPin || '' },
-            body: payload,
-          },
+          { headers: { 'x-quiz-pin': payload.quizPin || '' }, body: payload },
           sessionId,
         );
         socket.data.sessionId = sessionId;
@@ -71,10 +68,7 @@ function registerSocketHandlers(io, runtimeService) {
 
     socket.on('player:buzz', async (payload, callback) => {
       try {
-        await runtimeService.buzzIn({
-          sessionId: payload.sessionId,
-          playerId: payload.playerId,
-        });
+        await runtimeService.buzzIn({ sessionId: payload.sessionId, playerId: payload.playerId });
         callback?.({ ok: true });
       } catch (error) {
         callback?.({ ok: false, message: error.message });
@@ -94,6 +88,61 @@ function registerSocketHandlers(io, runtimeService) {
       }
     });
 
+    // Real-time buzz answer text streaming
+    socket.on('player:buzz-text-update', async (payload) => {
+      try {
+        await runtimeService.updateBuzzAnswerLive({
+          sessionId: payload.sessionId,
+          playerId: payload.playerId,
+          text: payload.text,
+        });
+      } catch {
+        // Silently ignore streaming errors
+      }
+    });
+
+    // Board mode: player selects a question tile
+    socket.on('player:select-question', async (payload, callback) => {
+      try {
+        await runtimeService.selectBoardQuestion({
+          sessionId: payload.sessionId,
+          playerId: payload.playerId,
+          questionId: payload.questionId,
+        });
+        callback?.({ ok: true });
+      } catch (error) {
+        callback?.({ ok: false, message: error.message });
+      }
+    });
+
+    // Cat in the Bag: assign question to another player
+    socket.on('player:cib-assign', async (payload, callback) => {
+      try {
+        await runtimeService.assignCatInBag({
+          sessionId: payload.sessionId,
+          assigningPlayerId: payload.assigningPlayerId,
+          targetPlayerId: payload.targetPlayerId,
+        });
+        callback?.({ ok: true });
+      } catch (error) {
+        callback?.({ ok: false, message: error.message });
+      }
+    });
+
+    // Stakes: player submits a wager
+    socket.on('player:stakes-wager', async (payload, callback) => {
+      try {
+        await runtimeService.submitStakesWager({
+          sessionId: payload.sessionId,
+          playerId: payload.playerId,
+          wager: payload.wager,
+        });
+        callback?.({ ok: true });
+      } catch (error) {
+        callback?.({ ok: false, message: error.message });
+      }
+    });
+
     socket.on('disconnect', async () => {
       if (socket.data.role === 'player') {
         await runtimeService.disconnectPlayer(socket.id);
@@ -102,6 +151,4 @@ function registerSocketHandlers(io, runtimeService) {
   });
 }
 
-module.exports = {
-  registerSocketHandlers,
-};
+module.exports = { registerSocketHandlers };

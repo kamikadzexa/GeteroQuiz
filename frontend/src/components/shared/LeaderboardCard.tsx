@@ -23,9 +23,11 @@ export function LeaderboardCard({
           <span className="rank">#{index + 1}</span>
           <div className="leaderboard-player">
             <Avatar avatar={entry.avatar} name={entry.displayName} />
-            <div>
+            <div className="leaderboard-player-info">
               <strong>{entry.displayName}</strong>
-              <span>{entry.isConnected ? 'Online' : 'Away'}</span>
+              <span className={entry.isConnected ? 'player-status online' : 'player-status away'}>
+                {entry.isConnected ? 'Online' : 'Away'}
+              </span>
             </div>
           </div>
           <strong className="score">{entry.score}</strong>

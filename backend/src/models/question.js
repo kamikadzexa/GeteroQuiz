@@ -31,6 +31,16 @@ module.exports = (sequelize, DataTypes) =>
         allowNull: false,
         defaultValue: '',
       },
+      correctAnswerMediaType: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        defaultValue: 'none',
+      },
+      correctAnswerMediaUrl: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        defaultValue: '',
+      },
       mediaType: {
         type: DataTypes.ENUM('none', 'image', 'audio', 'video'),
         allowNull: false,
@@ -55,6 +65,16 @@ module.exports = (sequelize, DataTypes) =>
         type: DataTypes.INTEGER,
         allowNull: false,
         defaultValue: 100,
+      },
+      columnName: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        defaultValue: '',
+      },
+      specialType: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        defaultValue: 'normal',
       },
     },
     {

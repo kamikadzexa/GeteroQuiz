@@ -46,6 +46,8 @@ function sanitizeQuestion(question: Question): Question {
   const safePoints = Number.isFinite(question.points) ? Math.max(0, question.points) : 100
   const safePenalty = Number.isFinite(question.penaltyPoints) ? Math.max(0, question.penaltyPoints) : 100
   const safeTimer = Number.isFinite(question.timeLimitSeconds) ? Math.max(0, question.timeLimitSeconds) : 20
+  const safeCorrectAnswerMediaType = question.correctAnswerMediaType ?? 'none'
+  const safeCorrectAnswerMediaUrl = safeCorrectAnswerMediaType === 'none' ? '' : (question.correctAnswerMediaUrl ?? '')
 
   if (question.type === 'text') {
     return {
@@ -56,6 +58,10 @@ function sanitizeQuestion(question: Question): Question {
       penaltyPoints: safePenalty,
       timeLimitSeconds: safeTimer,
       correctAnswer: question.correctAnswer || '',
+      correctAnswerMediaType: safeCorrectAnswerMediaType,
+      correctAnswerMediaUrl: safeCorrectAnswerMediaUrl,
+      columnName: question.columnName || '',
+      specialType: question.specialType || 'normal',
     }
   }
 
@@ -72,6 +78,10 @@ function sanitizeQuestion(question: Question): Question {
     penaltyPoints: safePenalty,
     timeLimitSeconds: safeTimer,
     correctAnswer,
+    correctAnswerMediaType: safeCorrectAnswerMediaType,
+    correctAnswerMediaUrl: safeCorrectAnswerMediaUrl,
+    columnName: question.columnName || '',
+    specialType: question.specialType || 'normal',
   }
 }
 
@@ -808,6 +818,75 @@ export function QuizEditorPage() {
               <div className="question-flow-step">
                 <div className="step-number">6</div>
                 <div className="step-body">
+                  <strong>{t('editor.columnName')}</strong>
+                  <span>{t('editor.buzzModeHint')}</span>
+                  <div className="score-grid">
+                    <label>
+                      <span>{t('editor.columnName')}</span>
+                      <input
+                        onChange={(event) => patchQuestion(question.id, (current) => ({ ...current, columnName: event.target.value }))}
+                        placeholder={t('editor.columnNamePlaceholder')}
+                        value={question.columnName}
+                      />
+                    </label>
+                    <label>
+                      <span>{t('editor.specialType')}</span>
+                      <select
+                        onChange={(event) =>
+                          patchQuestion(question.id, (current) => ({ ...current, specialType: event.target.value as Question['specialType'] }))
+                        }
+                        value={question.specialType}
+                      >
+                        <option value="normal">{t('editor.specialTypeNormal')}</option>
+                        <option value="cat_in_bag">{t('editor.specialTypeCatInBag')}</option>
+                        <option value="stakes">{t('editor.specialTypeStakes')}</option>
+                      </select>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div className="question-flow-step">
+                <div className="step-number">7</div>
+                <div className="step-body">
+                  <strong>{t('editor.correctAnswerMedia')}</strong>
+                  <span>{t('editor.correctAnswer')}</span>
+                  <div className="score-grid">
+                    <label>
+                      <span>{t('editor.correctAnswerMediaType')}</span>
+                      <select
+                        onChange={(event) =>
+                          patchQuestion(question.id, (current) => ({
+                            ...current,
+                            correctAnswerMediaType: event.target.value as MediaType,
+                            correctAnswerMediaUrl: event.target.value === 'none' ? '' : (current.correctAnswerMediaUrl ?? ''),
+                          }))
+                        }
+                        value={question.correctAnswerMediaType ?? 'none'}
+                      >
+                        {(['none', 'image', 'audio', 'video'] as MediaType[]).map((mediaType) => (
+                          <option key={mediaType} value={mediaType}>
+                            {t(`editor.${mediaType}`)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      <span>{t('editor.correctAnswerMediaUrl')}</span>
+                      <input
+                        disabled={(question.correctAnswerMediaType ?? 'none') === 'none'}
+                        onChange={(event) => patchQuestion(question.id, (current) => ({ ...current, correctAnswerMediaUrl: event.target.value }))}
+                        placeholder={t('editor.correctAnswerMediaUrl')}
+                        value={question.correctAnswerMediaUrl ?? ''}
+                      />
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div className="question-flow-step">
+                <div className="step-number">8</div>
+                <div className="step-body">
                   <strong>{t('editor.media')}</strong>
                   <span>{t('editor.mediaHint')}</span>
                   <div className="selection-grid">
@@ -927,6 +1006,10 @@ export function QuizEditorPage() {
                 timeLimitSeconds: 20,
                 points: 100,
                 penaltyPoints: 100,
+                columnName: '',
+                specialType: 'normal',
+                correctAnswerMediaType: 'none',
+                correctAnswerMediaUrl: '',
               }, getStoredQuizPin(quiz.id) || undefined)
               const updatedQuiz = await api.getQuiz(token, quizId, getStoredQuizPin(quiz.id) || undefined)
               setQuiz(updatedQuiz)

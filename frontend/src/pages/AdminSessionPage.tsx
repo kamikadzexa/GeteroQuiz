@@ -1,13 +1,21 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { LeaderboardCard } from '../components/shared/LeaderboardCard'
+import { QuestionMedia } from '../components/shared/QuestionMedia'
 import { useAuth } from '../context/AuthContext'
 import { useI18n } from '../context/I18nContext'
 import { useCountdown } from '../hooks/useCountdown'
-import { api, getStoredSessionPin, setStoredSessionPin } from '../services/api'
+import { api, assetUrl, getStoredSessionPin, setStoredSessionPin } from '../services/api'
 import { getSocket } from '../services/socket'
 import type { AdminSessionState } from '../types'
 import { withSessionPin } from '../utils/quizPin'
+
+function PlayerAvatar({ avatar, name }: { avatar: string; name: string }) {
+  if (avatar.startsWith('emoji:')) {
+    return <span className="avatar emoji" style={{ width: '2rem', height: '2rem', fontSize: '1rem' }}>{avatar.replace('emoji:', '')}</span>
+  }
+  return <img alt={name} className="avatar" src={assetUrl(avatar)} style={{ width: '2rem', height: '2rem' }} />
+}
 
 export function AdminSessionPage() {
   const { t } = useI18n()
@@ -18,11 +26,17 @@ export function AdminSessionPage() {
   const [durationInput, setDurationInput] = useState('15')
   const [error, setError] = useState('')
   const [actionBusy, setActionBusy] = useState(false)
+  const [scoreAdjusts, setScoreAdjusts] = useState<Record<number, string>>({})
+  const [liveBuzzText, setLiveBuzzText] = useState('')
+  const liveBuzzTextRef = useRef('')
+
   const sessionHasStarted = (sessionState?.status === 'live' || (sessionState?.currentQuestionIndex ?? -1) >= 0) ?? false
   const timerEnabled = Boolean(sessionState?.autoAdvanceEnabled)
   const timerPaused = Boolean(sessionState?.autoAdvancePaused)
   const inReview = sessionState?.phase === 'review'
   const timerCounting = timerEnabled && inReview && !timerPaused
+  const isBuzzMode = sessionState?.mode === 'buzz'
+
   const questionSecondsLeft = useCountdown(
     sessionState?.phase === 'open' ? sessionState.closesAt : null,
     sessionState?.serverNow ?? null,
@@ -64,63 +78,35 @@ export function AdminSessionPage() {
   async function saveAnswerDuration(val?: string) {
     if (!token || !sessionState || actionBusy) return
     const duration = parseDuration(val ?? answerInput)
-    if (duration == null) {
-      setAnswerInput(String(sessionState.answerDurationSeconds))
-      setError('Answer time must be a positive number')
-      return
-    }
-    if (duration === sessionState.answerDurationSeconds) {
-      setAnswerInput(String(duration))
-      return
-    }
+    if (duration == null) { setAnswerInput(String(sessionState.answerDurationSeconds)); setError('Answer time must be a positive number'); return }
+    if (duration === sessionState.answerDurationSeconds) { setAnswerInput(String(duration)); return }
     setActionBusy(true)
     try {
       setError('')
-      const next = await api.updateAutoAdvance(
-        token,
-        sessionState.id,
-        { answerDurationSeconds: duration },
-        getStoredSessionPin(sessionId) || undefined,
-      )
+      const next = await api.updateAutoAdvance(token, sessionState.id, { answerDurationSeconds: duration }, getStoredSessionPin(sessionId) || undefined)
       setSessionState(next)
       setAnswerInput(String(next.answerDurationSeconds))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not update timer')
       setAnswerInput(String(sessionState.answerDurationSeconds))
-    } finally {
-      setActionBusy(false)
-    }
+    } finally { setActionBusy(false) }
   }
 
   async function saveDuration(val?: string) {
     if (!token || !sessionState || actionBusy) return
     const duration = parseDuration(val ?? durationInput)
-    if (duration == null) {
-      setDurationInput(String(sessionState.autoAdvanceDurationSeconds))
-      setError('Advance time must be a positive number')
-      return
-    }
-    if (duration === sessionState.autoAdvanceDurationSeconds) {
-      setDurationInput(String(duration))
-      return
-    }
+    if (duration == null) { setDurationInput(String(sessionState.autoAdvanceDurationSeconds)); setError('Advance time must be a positive number'); return }
+    if (duration === sessionState.autoAdvanceDurationSeconds) { setDurationInput(String(duration)); return }
     setActionBusy(true)
     try {
       setError('')
-      const next = await api.updateAutoAdvance(
-        token,
-        sessionState.id,
-        { durationSeconds: duration },
-        getStoredSessionPin(sessionId) || undefined,
-      )
+      const next = await api.updateAutoAdvance(token, sessionState.id, { durationSeconds: duration }, getStoredSessionPin(sessionId) || undefined)
       setSessionState(next)
       setDurationInput(String(next.autoAdvanceDurationSeconds))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not update timer')
       setDurationInput(String(sessionState.autoAdvanceDurationSeconds))
-    } finally {
-      setActionBusy(false)
-    }
+    } finally { setActionBusy(false) }
   }
 
   async function toggleTimer() {
@@ -128,18 +114,10 @@ export function AdminSessionPage() {
     setActionBusy(true)
     try {
       setError('')
-      const next = await api.updateAutoAdvance(
-        token,
-        sessionState.id,
-        { enabled: !timerEnabled },
-        getStoredSessionPin(sessionId) || undefined,
-      )
+      const next = await api.updateAutoAdvance(token, sessionState.id, { enabled: !timerEnabled }, getStoredSessionPin(sessionId) || undefined)
       setSessionState(next)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not update timer')
-    } finally {
-      setActionBusy(false)
-    }
+    } catch (e) { setError(e instanceof Error ? e.message : 'Could not update timer') }
+    finally { setActionBusy(false) }
   }
 
   async function togglePause() {
@@ -147,23 +125,14 @@ export function AdminSessionPage() {
     setActionBusy(true)
     try {
       setError('')
-      const next = await api.updateAutoAdvance(
-        token,
-        sessionState.id,
-        { paused: !timerPaused },
-        getStoredSessionPin(sessionId) || undefined,
-      )
+      const next = await api.updateAutoAdvance(token, sessionState.id, { paused: !timerPaused }, getStoredSessionPin(sessionId) || undefined)
       setSessionState(next)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not update timer')
-    } finally {
-      setActionBusy(false)
-    }
+    } catch (e) { setError(e instanceof Error ? e.message : 'Could not update timer') }
+    finally { setActionBusy(false) }
   }
 
   async function triggerHostAction(action: 'advance' | 'close' | 'replay' | 'finish') {
     if (!token || !sessionState || actionBusy) return
-
     try {
       setActionBusy(true)
       setError('')
@@ -174,37 +143,78 @@ export function AdminSessionPage() {
       if (action === 'finish') await api.finishSession(token, sessionState.id, quizPin)
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : 'Could not update session')
-    } finally {
-      setActionBusy(false)
-    }
+    } finally { setActionBusy(false) }
+  }
+
+  async function handleJudgeBuzz(isCorrect: boolean) {
+    if (!token || !sessionState) return
+    try {
+      setError('')
+      await api.judgeBuzz(token, sessionState.id, isCorrect, getStoredSessionPin(sessionId) || undefined)
+      setLiveBuzzText('')
+      liveBuzzTextRef.current = ''
+    } catch (e) { setError(e instanceof Error ? e.message : 'Could not judge') }
+  }
+
+  async function handleAdjustScore(playerId: number) {
+    if (!token || !sessionState) return
+    const raw = scoreAdjusts[playerId] || ''
+    const delta = Number(raw)
+    if (!Number.isFinite(delta) || delta === 0) { setError('Enter a valid non-zero number'); return }
+    try {
+      setError('')
+      await api.adjustScore(token, sessionState.id, playerId, delta, getStoredSessionPin(sessionId) || undefined)
+      setScoreAdjusts((prev) => ({ ...prev, [playerId]: '' }))
+    } catch (e) { setError(e instanceof Error ? e.message : 'Could not adjust score') }
+  }
+
+  async function handleAssignSelector(playerId: number) {
+    if (!token || !sessionState) return
+    try {
+      setError('')
+      await api.assignBoardSelector(token, sessionState.id, playerId, getStoredSessionPin(sessionId) || undefined)
+    } catch (e) { setError(e instanceof Error ? e.message : 'Could not assign selector') }
+  }
+
+  async function handleCloseStakes() {
+    if (!token || !sessionState) return
+    try {
+      setError('')
+      await api.closeStakesWager(token, sessionState.id, getStoredSessionPin(sessionId) || undefined)
+    } catch (e) { setError(e instanceof Error ? e.message : 'Could not close stakes') }
   }
 
   useEffect(() => {
     if (!token) return
     const socket = getSocket()
-    const sync = (payload: AdminSessionState) => setSessionState(payload)
-
-    if (!socket.connected) {
-      socket.connect()
+    const sync = (payload: AdminSessionState) => {
+      setSessionState(payload)
+      // Keep live text in sync with server state if no local update is pending
+      if (payload.activeBuzzPlayerId == null) {
+        setLiveBuzzText('')
+        liveBuzzTextRef.current = ''
+      }
     }
+
+    const onBuzzText = (payload: { playerId: number; text: string }) => {
+      setLiveBuzzText(payload.text)
+      liveBuzzTextRef.current = payload.text
+    }
+
+    if (!socket.connected) socket.connect()
 
     void withSessionPin(
       sessionId,
       undefined,
       async (quizPin) => {
-        if (quizPin) {
-          setStoredSessionPin(sessionId, quizPin)
-        }
+        if (quizPin) setStoredSessionPin(sessionId, quizPin)
         const nextState = await api.getAdminSession(token, sessionId, quizPin)
         setSessionState(nextState)
-
         socket.emit(
           'join-admin-session',
           { sessionId: Number(sessionId), token, quizPin: quizPin || undefined },
           (result: { ok: boolean; message?: string }) => {
-            if (!result?.ok) {
-              setError(result?.message || 'Could not connect to admin session')
-            }
+            if (!result?.ok) setError(result?.message || 'Could not connect to admin session')
           },
         )
       },
@@ -214,9 +224,11 @@ export function AdminSessionPage() {
     })
 
     socket.on('admin:state', sync)
+    socket.on('admin:buzz-text', onBuzzText)
 
     return () => {
       socket.off('admin:state', sync)
+      socket.off('admin:buzz-text', onBuzzText)
     }
   }, [sessionId, t, token])
 
@@ -230,30 +242,87 @@ export function AdminSessionPage() {
     setDurationInput(String(sessionState.autoAdvanceDurationSeconds))
   }, [sessionState?.autoAdvanceDurationSeconds])
 
-  if (loading) {
-    return <section className="panel">{t('common.loading')}</section>
-  }
+  if (loading) return <section className="panel">{t('common.loading')}</section>
 
   if (!user || !token) {
     return (
       <section className="panel">
-        <Link className="ghost-button" to="/admin">
-          {t('admin.loginAction')}
-        </Link>
+        <Link className="ghost-button" to="/admin">{t('admin.loginAction')}</Link>
       </section>
     )
   }
 
-  if (!sessionState) {
-    return <section className="panel">{error || t('common.loading')}</section>
-  }
+  if (!sessionState) return <section className="panel">{error || t('common.loading')}</section>
 
-  const activeBuzzAnswer = sessionState.answers.find(
-    (answer) => answer.playerId === sessionState.activeBuzzPlayerId,
-  )
+  const activeBuzzPlayerId = sessionState.activeBuzzPlayerId
+  const activeBuzzPlayer = activeBuzzPlayerId != null
+    ? sessionState.players.find((p) => p.id === activeBuzzPlayerId) ?? null
+    : null
+  const activeBuzzAnswer = sessionState.answers.find((a) => a.playerId === activeBuzzPlayerId)
   const displayUrl = `${window.location.origin}/display/${sessionState.joinCode}`
+  const boardSelectorPlayer = sessionState.boardSelectingPlayerId != null
+    ? sessionState.players.find((p) => p.id === sessionState.boardSelectingPlayerId) ?? null
+    : null
+
   return (
     <div className="admin-session-layout">
+      {/* ─── Buzz answer popup/modal ─── */}
+      {isBuzzMode && activeBuzzPlayer ? (
+        <div className="modal-backdrop">
+          <div className="modal-panel">
+            <div className="inline-header">
+              <h2>{t('admin.buzzPopupTitle')}</h2>
+              <span className="chip active">{activeBuzzPlayer.displayName}</span>
+            </div>
+            <div className="buzz-live-text-box">
+              <span className="eyebrow">{t('admin.buzzPopupLiveText')}</span>
+              <p className="buzz-live-text">
+                {liveBuzzText || (activeBuzzAnswer?.submittedAnswer) || (
+                  <em style={{ color: 'var(--muted)' }}>{t('admin.buzzPopupNoText')}</em>
+                )}
+              </p>
+            </div>
+            {/* Correct answer for admin */}
+            {sessionState.correctAnswer ? (
+              <div className="correct-answer-box">
+                <span className="eyebrow">{t('admin.correctAnswer')}</span>
+                <p className="correct-answer-text">{sessionState.correctAnswer}</p>
+                {sessionState.correctAnswerMediaType && sessionState.correctAnswerMediaType !== 'none' && sessionState.correctAnswerMediaUrl ? (
+                  <div className="media-block" style={{ marginTop: '0.5rem' }}>
+                    {sessionState.correctAnswerMediaType === 'image' && (
+                      <img alt="Answer" className="media-visual" src={sessionState.correctAnswerMediaUrl} />
+                    )}
+                    {sessionState.correctAnswerMediaType === 'video' && (
+                      <video className="media-visual" controls src={sessionState.correctAnswerMediaUrl} />
+                    )}
+                    {sessionState.correctAnswerMediaType === 'audio' && (
+                      <audio controls src={sessionState.correctAnswerMediaUrl} style={{ width: '100%' }} />
+                    )}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+            <div className="action-row">
+              <button
+                className="cta-button secondary"
+                onClick={() => { void handleJudgeBuzz(true) }}
+                type="button"
+              >
+                {t('admin.correct')}
+              </button>
+              <button
+                className="ghost-button"
+                onClick={() => { void handleJudgeBuzz(false) }}
+                type="button"
+              >
+                {t('admin.wrong')}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* ─── Main control panel ─── */}
       <section className="panel">
         <div className="inline-header">
           <div>
@@ -261,12 +330,8 @@ export function AdminSessionPage() {
             <h1>{sessionState.title}</h1>
           </div>
           <div className="action-row">
-            <Link className="ghost-button" to="/admin">
-              {t('editor.back')}
-            </Link>
-            <button className="ghost-button" onClick={() => refresh()} type="button">
-              {t('admin.refresh')}
-            </button>
+            <Link className="ghost-button" to="/admin">{t('editor.back')}</Link>
+            <button className="ghost-button" onClick={() => { void refresh() }} type="button">{t('admin.refresh')}</button>
           </div>
         </div>
 
@@ -280,17 +345,13 @@ export function AdminSessionPage() {
           <div className="helper-banner">
             <div>
               <strong>{t('admin.players')}</strong>
-              <span>
-                {sessionState.playerCount} / {sessionState.connectedPlayerCount}
-              </span>
+              <span>{sessionState.playerCount} / {sessionState.connectedPlayerCount}</span>
             </div>
           </div>
           <div className="helper-banner">
             <div>
               <strong>{t('play.questionCounter')}</strong>
-              <span>
-                {Math.max(sessionState.currentQuestionIndex + 1, 0)} / {sessionState.totalQuestions}
-              </span>
+              <span>{Math.max(sessionState.currentQuestionIndex + 1, 0)} / {sessionState.totalQuestions}</span>
             </div>
           </div>
           <div className="helper-banner display-link-banner">
@@ -299,40 +360,47 @@ export function AdminSessionPage() {
               <span className="display-link-text">{displayUrl}</span>
             </div>
             <div className="action-row">
-              <a className="ghost-button" href={displayUrl} rel="noreferrer" target="_blank">
-                {t('admin.openDisplay')}
-              </a>
+              <a className="ghost-button" href={displayUrl} rel="noreferrer" target="_blank">{t('admin.openDisplay')}</a>
               <button
                 className="ghost-button"
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText(displayUrl)
-                  } catch {
-                    setError(t('admin.copyFailed'))
-                  }
-                }}
+                onClick={async () => { try { await navigator.clipboard.writeText(displayUrl) } catch { setError(t('admin.copyFailed')) } }}
                 type="button"
-              >
-                {t('admin.copyDisplayLink')}
-              </button>
+              >{t('admin.copyDisplayLink')}</button>
             </div>
           </div>
         </div>
 
         <div className="admin-control-grid">
-          <button className="cta-button" disabled={actionBusy} onClick={() => triggerHostAction('advance')} type="button">
+          <button className="cta-button" disabled={actionBusy} onClick={() => { void triggerHostAction('advance') }} type="button">
             {sessionHasStarted ? t('admin.openNextQuestion') : t('admin.startSession')}
           </button>
-          <button className="ghost-button" disabled={actionBusy} onClick={() => triggerHostAction('close')} type="button">
+          <button className="ghost-button" disabled={actionBusy} onClick={() => { void triggerHostAction('close') }} type="button">
             {t('admin.closeQuestion')}
           </button>
-          <button className="ghost-button" disabled={actionBusy} onClick={() => triggerHostAction('replay')} type="button">
+          <button className="ghost-button" disabled={actionBusy} onClick={() => { void triggerHostAction('replay') }} type="button">
             {t('admin.replayQuestion')}
           </button>
-          <button className="ghost-button" disabled={actionBusy} onClick={() => triggerHostAction('finish')} type="button">
+          <button className="ghost-button" disabled={actionBusy} onClick={() => { void triggerHostAction('finish') }} type="button">
             {t('admin.finishSession')}
           </button>
         </div>
+
+        {/* Board mode: selector status + stakes close */}
+        {isBuzzMode && sessionState.status === 'live' ? (
+          <div className="board-status-bar">
+            <div>
+              <span className="eyebrow">{t('admin.boardSelector')}</span>
+              <span style={{ marginLeft: '0.6rem', fontWeight: 600 }}>
+                {boardSelectorPlayer ? boardSelectorPlayer.displayName : <em style={{ color: 'var(--muted)', fontWeight: 400 }}>{t('admin.noSelector')}</em>}
+              </span>
+            </div>
+            {sessionState.stakesPhase === 'collecting' ? (
+              <button className="ghost-button" onClick={() => { void handleCloseStakes() }} type="button">
+                {t('admin.closeStakes')}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
 
         <div className="automation-card">
           <div className="inline-header">
@@ -341,19 +409,11 @@ export function AdminSessionPage() {
               <p className="helper-text">{t('admin.autoTimerHint')}</p>
             </div>
             <span className={timerCounting ? 'chip active' : 'chip'}>
-              {timerEnabled
-                ? timerPaused
-                  ? t('admin.paused')
-                  : timerCounting
-                    ? `${t('admin.nextQuestionIn')} ${autoCountdownLeft}s`
-                    : t('admin.running')
-                : t('admin.off')}
+              {timerEnabled ? timerPaused ? t('admin.paused') : timerCounting ? `${t('admin.nextQuestionIn')} ${autoCountdownLeft}s` : t('admin.running') : t('admin.off')}
             </span>
           </div>
 
-          <div className={`session-timer-block${sessionState.phase === 'open'
-            ? `${timerPaused ? ' paused' : ` timer-${answerTone}`}`
-            : ''}`} style={{ marginBottom: 0 }}>
+          <div className={`session-timer-block${sessionState.phase === 'open' ? `${timerPaused ? ' paused' : ` timer-${answerTone}`}` : ''}`} style={{ marginBottom: 0 }}>
             <div className="inline-header">
               <strong>{t('admin.answerTimer')}</strong>
               <span>{answerCountdown}s</span>
@@ -364,17 +424,11 @@ export function AdminSessionPage() {
             <label style={{ display: 'grid', gap: '0.4rem', color: 'var(--muted)' }}>
               <span>{t('editor.timer')}</span>
               <input
-                inputMode="numeric"
-                min={1}
+                inputMode="numeric" min={1}
                 onBlur={() => { void saveAnswerDuration() }}
                 onChange={(e) => setAnswerInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key !== 'Enter') return
-                  e.preventDefault()
-                  void saveAnswerDuration((e.target as HTMLInputElement).value)
-                }}
-                type="number"
-                value={answerInput}
+                onKeyDown={(e) => { if (e.key !== 'Enter') return; e.preventDefault(); void saveAnswerDuration((e.target as HTMLInputElement).value) }}
+                type="number" value={answerInput}
               />
             </label>
           </div>
@@ -391,33 +445,17 @@ export function AdminSessionPage() {
               <label>
                 <span>{t('editor.timer')}</span>
                 <input
-                  inputMode="numeric"
-                  min={1}
+                  inputMode="numeric" min={1}
                   onBlur={() => { void saveDuration() }}
                   onChange={(e) => setDurationInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key !== 'Enter') return
-                    e.preventDefault()
-                    void saveDuration((e.target as HTMLInputElement).value)
-                  }}
-                  type="number"
-                  value={durationInput}
+                  onKeyDown={(e) => { if (e.key !== 'Enter') return; e.preventDefault(); void saveDuration((e.target as HTMLInputElement).value) }}
+                  type="number" value={durationInput}
                 />
               </label>
-              <button
-                className="cta-button secondary"
-                disabled={actionBusy}
-                onClick={() => { void toggleTimer() }}
-                type="button"
-              >
+              <button className="cta-button secondary" disabled={actionBusy} onClick={() => { void toggleTimer() }} type="button">
                 {timerEnabled ? t('admin.stopAutoTimer') : t('admin.startAutoTimer')}
               </button>
-              <button
-                className="ghost-button"
-                disabled={!timerEnabled || !sessionHasStarted || actionBusy}
-                onClick={() => { void togglePause() }}
-                type="button"
-              >
+              <button className="ghost-button" disabled={!timerEnabled || !sessionHasStarted || actionBusy} onClick={() => { void togglePause() }} type="button">
                 {timerPaused ? t('admin.resume') : t('admin.pause')}
               </button>
             </div>
@@ -426,13 +464,35 @@ export function AdminSessionPage() {
 
         {sessionState.currentQuestion ? (
           <div className="question-card">
-            <span className="eyebrow">{sessionState.mode.toUpperCase()}</span>
+            <span className="eyebrow">{sessionState.mode.toUpperCase()}{sessionState.currentQuestion.specialType && sessionState.currentQuestion.specialType !== 'normal' ? ` · ${sessionState.currentQuestion.specialType.replace('_', ' ').toUpperCase()}` : ''}</span>
             <h2>{sessionState.currentQuestion.prompt}</h2>
-            <p className="helper-text">{sessionState.currentQuestion.helpText}</p>
+            {sessionState.currentQuestion.helpText ? <p className="helper-text">{sessionState.currentQuestion.helpText}</p> : null}
+            <QuestionMedia question={sessionState.currentQuestion} />
             <div className="pill-row">
               <span className="chip">{sessionState.phase}</span>
               <span className="chip">{sessionState.answerCount} answers</span>
+              <span className="chip">{sessionState.currentQuestion.points} pts</span>
             </div>
+            {/* Correct answer always visible to admin */}
+            {sessionState.correctAnswer ? (
+              <div className="correct-answer-box">
+                <span className="eyebrow">{t('admin.correctAnswer')}</span>
+                <p className="correct-answer-text">{sessionState.correctAnswer}</p>
+                {sessionState.correctAnswerMediaType && sessionState.correctAnswerMediaType !== 'none' && sessionState.correctAnswerMediaUrl ? (
+                  <div className="media-block" style={{ marginTop: '0.5rem' }}>
+                    {sessionState.correctAnswerMediaType === 'image' && (
+                      <img alt="Answer" className="media-visual" src={sessionState.correctAnswerMediaUrl} />
+                    )}
+                    {sessionState.correctAnswerMediaType === 'video' && (
+                      <video className="media-visual" controls src={sessionState.correctAnswerMediaUrl} />
+                    )}
+                    {sessionState.correctAnswerMediaType === 'audio' && (
+                      <audio controls src={sessionState.correctAnswerMediaUrl} style={{ width: '100%' }} />
+                    )}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         ) : (
           <div className="question-card waiting-card">
@@ -441,35 +501,88 @@ export function AdminSessionPage() {
         )}
       </section>
 
+      {/* ─── Players panel ─── */}
       <section className="panel">
         <div className="inline-header">
           <h2>{t('admin.players')}</h2>
           <span className="chip">{sessionState.joinCode}</span>
         </div>
+
+        {/* Stakes wagers display */}
+        {isBuzzMode && sessionState.stakesPhase && Object.keys(sessionState.stakesWagers).length > 0 ? (
+          <div className="stakes-wager-list">
+            <strong style={{ fontSize: '0.9rem', color: 'var(--muted)' }}>{t('admin.stakesWagers')}</strong>
+            {Object.entries(sessionState.stakesWagers).map(([pid, amount]) => {
+              const p = sessionState.players.find((pl) => pl.id === Number(pid))
+              return (
+                <div className="stakes-wager-row" key={pid}>
+                  <span>{p?.displayName ?? `Player ${pid}`}</span>
+                  <strong>{amount} pts</strong>
+                </div>
+              )
+            })}
+          </div>
+        ) : null}
+
         <div className="admin-player-list">
           {sessionState.players.map((player) => (
             <div className="admin-player-card" key={player.id}>
-              <div>
-                <strong>{player.displayName}</strong>
-                <span>
-                  {player.playerCode} - {player.isConnected ? t('admin.online') : t('admin.away')}
-                </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <PlayerAvatar avatar={player.avatar} name={player.displayName} />
+                <div>
+                  <strong>{player.displayName}</strong>
+                  <span>
+                    {player.playerCode} · {player.isConnected ? t('admin.online') : t('admin.away')} · {player.score ?? 0} pts
+                  </span>
+                </div>
               </div>
-              <div className="action-row">
-                <span className="chip">{player.preferredLanguage.toUpperCase()}</span>
-                <button
-                  className="ghost-button"
-                  onClick={() => api.kickPlayer(token, sessionState.id, player.id, getStoredSessionPin(sessionId) || undefined)}
-                  type="button"
-                >
-                  {t('admin.kick')}
-                </button>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', alignItems: 'flex-end' }}>
+                <div className="action-row">
+                  <span className="chip">{player.preferredLanguage.toUpperCase()}</span>
+                  {isBuzzMode && sessionState.phase === 'waiting' ? (
+                    <button
+                      className={sessionState.boardSelectingPlayerId === player.id ? 'cta-button secondary' : 'ghost-button'}
+                      onClick={() => { void handleAssignSelector(player.id) }}
+                      style={{ fontSize: '0.82rem', padding: '0.4rem 0.7rem', minHeight: 'auto' }}
+                      type="button"
+                    >
+                      {t('admin.assignSelector')}
+                    </button>
+                  ) : null}
+                  <button
+                    className="ghost-button danger-button"
+                    onClick={() => { void api.kickPlayer(token!, sessionState.id, player.id, getStoredSessionPin(sessionId) || undefined) }}
+                    type="button"
+                  >
+                    {t('admin.kick')}
+                  </button>
+                </div>
+                {/* Score adjustment */}
+                <div className="score-adjust-row">
+                  <input
+                    className="score-adjust-input"
+                    inputMode="numeric"
+                    onChange={(e) => setScoreAdjusts((prev) => ({ ...prev, [player.id]: e.target.value }))}
+                    placeholder={t('admin.adjustScorePlaceholder')}
+                    type="number"
+                    value={scoreAdjusts[player.id] ?? ''}
+                  />
+                  <button
+                    className="ghost-button"
+                    onClick={() => { void handleAdjustScore(player.id) }}
+                    style={{ fontSize: '0.82rem', padding: '0.4rem 0.7rem', minHeight: 'auto' }}
+                    type="button"
+                  >
+                    {t('admin.adjustScoreApply')}
+                  </button>
+                </div>
               </div>
             </div>
           ))}
         </div>
       </section>
 
+      {/* ─── Leaderboard ─── */}
       <section className="panel">
         <div className="inline-header">
           <h2>{t('admin.liveLeaderboard')}</h2>
@@ -478,34 +591,12 @@ export function AdminSessionPage() {
         <LeaderboardCard entries={sessionState.leaderboard} />
       </section>
 
+      {/* ─── Review answers ─── */}
       <section className="panel">
         <div className="inline-header">
           <h2>{t('admin.review')}</h2>
           {activeBuzzAnswer ? <span className="chip active">{activeBuzzAnswer.playerName}</span> : null}
         </div>
-
-        {sessionState.mode === 'buzz' && activeBuzzAnswer ? (
-          <div className="review-box">
-            <strong>{activeBuzzAnswer.playerName}</strong>
-            <p>{activeBuzzAnswer.submittedAnswer || t('admin.awaitingAttempt')}</p>
-            <div className="action-row">
-              <button
-                className="cta-button secondary"
-                onClick={() => api.judgeBuzz(token, sessionState.id, true, getStoredSessionPin(sessionId) || undefined)}
-                type="button"
-              >
-                {t('admin.correct')}
-              </button>
-              <button
-                className="ghost-button"
-                onClick={() => api.judgeBuzz(token, sessionState.id, false, getStoredSessionPin(sessionId) || undefined)}
-                type="button"
-              >
-                {t('admin.wrong')}
-              </button>
-            </div>
-          </div>
-        ) : null}
 
         <div className="review-list">
           {sessionState.answers.map((answer) => (
@@ -516,32 +607,33 @@ export function AdminSessionPage() {
                 {answer.suggestedCorrect ? <span className="chip active">{t('admin.autoMatch')}</span> : null}
                 {answer.status === 'judged' ? (
                   <span className="chip">{answer.isCorrect ? t('admin.correct') : t('admin.wrong')}</span>
-                ) : (
-                  <span className="chip">{t('admin.pending')}</span>
-                )}
+                ) : <span className="chip">{t('admin.pending')}</span>}
+                <span className="chip">{answer.awardedPoints} pts</span>
               </div>
-              {sessionState.currentQuestion?.type === 'text' && answer.status !== 'judged' ? (
+              {sessionState.currentQuestion?.type === 'text' && answer.status !== 'judged' && sessionState.mode !== 'buzz' ? (
                 <div className="action-row">
                   <button
                     className="cta-button secondary"
-                    onClick={() => api.judgeAnswer(token, sessionState.id, answer.id, true, getStoredSessionPin(sessionId) || undefined)}
+                    onClick={() => { void api.judgeAnswer(token!, sessionState.id, answer.id, true, getStoredSessionPin(sessionId) || undefined) }}
                     type="button"
-                  >
-                    {t('admin.correct')}
-                  </button>
+                  >{t('admin.correct')}</button>
                   <button
                     className="ghost-button"
-                    onClick={() => api.judgeAnswer(token, sessionState.id, answer.id, false, getStoredSessionPin(sessionId) || undefined)}
+                    onClick={() => { void api.judgeAnswer(token!, sessionState.id, answer.id, false, getStoredSessionPin(sessionId) || undefined) }}
                     type="button"
-                  >
-                    {t('admin.wrong')}
-                  </button>
+                  >{t('admin.wrong')}</button>
                 </div>
               ) : null}
             </div>
           ))}
         </div>
       </section>
+
+      {error ? (
+        <div style={{ gridColumn: '1 / -1' }}>
+          <p className="error-text">{error}</p>
+        </div>
+      ) : null}
     </div>
   )
 }
