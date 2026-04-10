@@ -64,7 +64,7 @@ export function BuzzBoard({
     <div className="buzz-board">
       <div
         className="buzz-board-columns"
-        style={{ gridTemplateColumns: `repeat(${columns.length}, minmax(11rem, 1fr))` }}
+        style={{ gridTemplateColumns: `repeat(${columns.length}, minmax(min(11rem, 100% / ${columns.length}), 1fr))` }}
       >
         {columns.map((column) => (
           <div className="buzz-board-column" key={column.name}>
