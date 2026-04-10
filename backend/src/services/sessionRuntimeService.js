@@ -393,10 +393,66 @@ class SessionRuntimeService {
       }));
   }
 
-  buildBoardColumns(questions) {
+  getOrderedRoundNames(session) {
+    const orderedRoundNames = [];
+    const boardLayout = Array.isArray(session.quiz.boardLayout) ? session.quiz.boardLayout : [];
+
+    for (const round of boardLayout) {
+      if (round?.name && !orderedRoundNames.includes(round.name)) {
+        orderedRoundNames.push(round.name);
+      }
+    }
+
+    for (const question of session.quiz.questions) {
+      if (question?.roundName && !orderedRoundNames.includes(question.roundName)) {
+        orderedRoundNames.push(question.roundName);
+      }
+    }
+
+    return orderedRoundNames;
+  }
+
+  getPendingRoundName(session, state) {
+    if (session.quiz.mode !== 'buzz') return null;
+
+    const unansweredQuestions = session.quiz.questions.filter(
+      (question) => !state.boardAnsweredQuestionIds.has(question.id),
+    );
+
+    const orderedRoundNames = this.getOrderedRoundNames(session);
+    for (const roundName of orderedRoundNames) {
+      if (unansweredQuestions.some((question) => question.roundName === roundName)) {
+        return roundName;
+      }
+    }
+
+    const unansweredQuestion = unansweredQuestions[0] ?? null;
+    if (unansweredQuestion?.roundName) return unansweredQuestion.roundName;
+
+    if (orderedRoundNames[0]) return orderedRoundNames[0];
+
+    const firstRoundQuestion = session.quiz.questions.find((question) => question.roundName);
+    return firstRoundQuestion?.roundName ?? null;
+  }
+
+  getBoardRoundName(session, state) {
+    if (session.quiz.mode !== 'buzz') return null;
+
+    if (session.phase === 'open' || session.phase === 'review') {
+      const currentQuestion = session.quiz.questions[session.currentQuestionIndex] ?? null;
+      if (currentQuestion?.roundName) return currentQuestion.roundName;
+    }
+
+    return this.getPendingRoundName(session, state);
+  }
+
+  buildBoardColumns(questions, roundName = null, boardLayout = []) {
+    const scopedQuestions = roundName
+      ? questions.filter((question) => question.roundName === roundName)
+      : questions;
     const columnMap = new Map();
 
-    for (const q of questions) {
+    for (const q of scopedQuestions) {
       const col = q.columnName || 'General';
       if (!columnMap.has(col)) columnMap.set(col, []);
       columnMap.get(col).push({
@@ -407,15 +463,31 @@ class SessionRuntimeService {
       });
     }
 
-    const columns = [];
-    for (const [name, tiles] of columnMap) {
-      columns.push({
-        name,
-        tiles: tiles.sort((a, b) => a.points - b.points),
-      });
+    const orderedColumnNames = [];
+    const activeRound = Array.isArray(boardLayout)
+      ? boardLayout.find((round) => round?.name === roundName)
+      : null;
+
+    for (const column of activeRound?.columns ?? []) {
+      if (column?.name && columnMap.has(column.name)) {
+        orderedColumnNames.push(column.name);
+      }
     }
 
-    return columns;
+    for (const name of columnMap.keys()) {
+      if (!orderedColumnNames.includes(name)) {
+        orderedColumnNames.push(name);
+      }
+    }
+
+    return orderedColumnNames.map((name) => ({
+      name,
+      tiles: (columnMap.get(name) ?? []).sort((a, b) => a.points - b.points),
+    }));
+  }
+
+  getUpcomingRoundName(session, state) {
+    return this.getPendingRoundName(session, state);
   }
 
   buildPublicStateFromGraph(session, viewerPlayerId = null) {
@@ -438,6 +510,8 @@ class SessionRuntimeService {
     const stakesSelectedPlayer = state.stakesSelectedPlayerId
       ? session.players.find((p) => p.id === state.stakesSelectedPlayerId) ?? null
       : null;
+
+    const boardRoundName = this.getBoardRoundName(session, state);
 
     return {
       id: session.id,
@@ -491,7 +565,10 @@ class SessionRuntimeService {
       // Board mode fields
       boardSelectingPlayerId: state.boardSelectingPlayerId,
       boardAnsweredQuestionIds: Array.from(state.boardAnsweredQuestionIds),
-      boardColumns: session.quiz.mode === 'buzz' ? this.buildBoardColumns(session.quiz.questions) : [],
+      boardColumns: session.quiz.mode === 'buzz'
+        ? this.buildBoardColumns(session.quiz.questions, boardRoundName, session.quiz.boardLayout)
+        : [],
+      upcomingRoundName: this.getUpcomingRoundName(session, state),
       catInBagPhase: state.catInBagPhase,
       catInBagTargetPlayerId: state.catInBagTargetPlayerId,
       catInBagTargetName: catInBagTargetPlayer?.displayName ?? null,
@@ -1077,6 +1154,28 @@ class SessionRuntimeService {
     return this.startQuestion(sessionId, questionIndex);
   }
 
+  async adminSelectBoardQuestion({ sessionId, questionId }) {
+    const session = await this.getSessionGraph(sessionId);
+    const state = await this.ensureState(sessionId);
+
+    if (session.status !== 'live' || session.phase !== 'waiting') {
+      throw new Error('Not in board selection phase');
+    }
+
+    if (session.quiz.mode !== 'buzz') {
+      throw new Error('Board selection is only available in buzz mode');
+    }
+
+    if (state.boardAnsweredQuestionIds.has(Number(questionId))) {
+      throw new Error('This question has already been answered');
+    }
+
+    const questionIndex = session.quiz.questions.findIndex((q) => q.id === Number(questionId));
+    if (questionIndex === -1) throw new Error('Question not found');
+
+    return this.startQuestion(sessionId, questionIndex);
+  }
+
   // Admin assigns who selects the next board question
   async assignBoardSelector({ sessionId, playerId }) {
     const state = await this.ensureState(sessionId);
@@ -1108,8 +1207,9 @@ class SessionRuntimeService {
   async assignCatInBag({ sessionId, assigningPlayerId, targetPlayerId }) {
     const session = await this.getSessionGraph(sessionId);
     const state = await this.ensureState(sessionId);
+    const question = session.quiz.questions[session.currentQuestionIndex] ?? null;
 
-    if (session.phase !== 'open' || session.quiz.mode !== 'buzz') {
+    if (!question || session.phase !== 'open' || session.quiz.mode !== 'buzz') {
       throw new Error('No buzz question is open');
     }
 
@@ -1124,8 +1224,54 @@ class SessionRuntimeService {
     const target = session.players.find((p) => p.id === Number(targetPlayerId));
     if (!target) throw new Error('Target player not found');
 
+    const currentAnswers = await Answer.count({ where: { sessionId, questionId: question.id } });
+    const [answer] = await Answer.findOrCreate({
+      where: { sessionId, playerId: Number(targetPlayerId), questionId: question.id },
+      defaults: { buzzOrder: currentAnswers + 1, submittedAt: new Date() },
+    });
+
+    answer.buzzOrder = answer.buzzOrder ?? currentAnswers + 1;
+    answer.submittedAt = new Date();
+    await answer.save();
+
     state.catInBagPhase = null;
     state.catInBagTargetPlayerId = Number(targetPlayerId);
+    state.currentBuzzPlayerId = Number(targetPlayerId);
+    state.buzzAttemptText = '';
+
+    await this.emitState(sessionId);
+  }
+
+  async adminAssignCatInBag({ sessionId, targetPlayerId }) {
+    const session = await this.getSessionGraph(sessionId);
+    const state = await this.ensureState(sessionId);
+    const question = session.quiz.questions[session.currentQuestionIndex] ?? null;
+
+    if (!question || session.phase !== 'open' || session.quiz.mode !== 'buzz') {
+      throw new Error('No buzz question is open');
+    }
+
+    if (state.catInBagPhase !== 'selecting') {
+      throw new Error('Not in Cat in the Bag selection phase');
+    }
+
+    const target = session.players.find((p) => p.id === Number(targetPlayerId));
+    if (!target) throw new Error('Target player not found');
+
+    const currentAnswers = await Answer.count({ where: { sessionId, questionId: question.id } });
+    const [answer] = await Answer.findOrCreate({
+      where: { sessionId, playerId: Number(targetPlayerId), questionId: question.id },
+      defaults: { buzzOrder: currentAnswers + 1, submittedAt: new Date() },
+    });
+
+    answer.buzzOrder = answer.buzzOrder ?? currentAnswers + 1;
+    answer.submittedAt = new Date();
+    await answer.save();
+
+    state.catInBagPhase = null;
+    state.catInBagTargetPlayerId = Number(targetPlayerId);
+    state.currentBuzzPlayerId = Number(targetPlayerId);
+    state.buzzAttemptText = '';
 
     await this.emitState(sessionId);
   }

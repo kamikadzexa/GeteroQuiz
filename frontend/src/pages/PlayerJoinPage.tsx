@@ -25,19 +25,43 @@ export function PlayerJoinPage() {
   const savedSeat = useMemo(() => (joinCode ? getSession(joinCode) : null), [getSession, joinCode])
 
   useEffect(() => {
-    api
-      .listPublicSessions()
-      .then((items) => {
+    let active = true
+
+    const loadActiveSessions = async () => {
+      try {
+        const items = await api.listPublicSessions()
+        if (!active) return
         setActiveSessions(items)
         pruneSessions(items.map((item) => item.joinCode))
-        if (!joinCode && items[0]) {
-          setJoinCode(items[0].joinCode)
-        }
-      })
-      .catch(() => {
+        setJoinCode((current) => (current || items[0]?.joinCode || ''))
+      } catch {
+        if (!active) return
         setActiveSessions([])
-      })
-  }, [])
+      }
+    }
+
+    void loadActiveSessions()
+
+    const intervalId = window.setInterval(() => {
+      void loadActiveSessions()
+    }, 5000)
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void loadActiveSessions()
+      }
+    }
+
+    window.addEventListener('focus', handleVisibilityChange)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      active = false
+      window.clearInterval(intervalId)
+      window.removeEventListener('focus', handleVisibilityChange)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [pruneSessions])
 
   useEffect(() => {
     if (!joinCode || joinCode.length < 5) {

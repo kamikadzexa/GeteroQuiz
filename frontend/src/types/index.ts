@@ -25,6 +25,17 @@ export interface BoardColumn {
   tiles: BoardTile[]
 }
 
+export interface QuizBoardColumn {
+  id: string
+  name: string
+}
+
+export interface QuizBoardRound {
+  id: string
+  name: string
+  columns: QuizBoardColumn[]
+}
+
 export interface Question {
   id: number
   prompt: string
@@ -41,6 +52,7 @@ export interface Question {
   correctAnswer?: string
   correctAnswerMediaType?: MediaType
   correctAnswerMediaUrl?: string
+  roundName: string
   columnName: string
   specialType: SpecialType
 }
@@ -94,6 +106,7 @@ export interface SessionState {
   boardSelectingPlayerId: number | null
   boardAnsweredQuestionIds: number[]
   boardColumns: BoardColumn[]
+  upcomingRoundName: string | null
   catInBagPhase: CatInBagPhase
   catInBagTargetPlayerId: number | null
   catInBagTargetName: string | null
@@ -157,6 +170,7 @@ export interface QuizDetail {
   accentColor: string
   isPublished: boolean
   hasEditorPin: boolean
+  boardLayout: QuizBoardRound[]
   questions: Question[]
 }
 

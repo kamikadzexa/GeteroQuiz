@@ -5,7 +5,7 @@ import { QuestionMedia } from '../components/shared/QuestionMedia'
 import { useAuth } from '../context/AuthContext'
 import { useI18n } from '../context/I18nContext'
 import { api, getStoredQuizPin, getUploadSizeError, MAX_UPLOAD_SIZE_MB, setStoredQuizPin } from '../services/api'
-import type { MediaType, Question, QuestionOption, QuestionType, QuizDetail } from '../types'
+import type { MediaType, Question, QuestionOption, QuestionType, QuizBoardRound, QuizDetail } from '../types'
 import { withQuizPin } from '../utils/quizPin'
 
 const ACCENT_PRESETS = ['#ff7a59', '#ff5f6d', '#ffb347', '#3fb7a1', '#2f8cff', '#6658f5', '#111827', '#f97316']
@@ -40,6 +40,44 @@ function getNextOptionId(options: QuestionOption[]) {
   }
 
   return createOptionLabel(index)
+}
+
+function createEntityId(prefix: string) {
+  return `${prefix}-${Math.random().toString(36).slice(2, 10)}`
+}
+
+function createBoardColumn(name = '') {
+  return {
+    id: createEntityId('column'),
+    name,
+  }
+}
+
+function createBoardRound(index: number) {
+  return {
+    id: createEntityId('round'),
+    name: `Round ${index + 1}`,
+    columns: [],
+  }
+}
+
+function sanitizeBoardLayout(layout: QuizBoardRound[] | undefined): QuizBoardRound[] {
+  if (!Array.isArray(layout)) return []
+
+  return layout.map((round, roundIndex) => ({
+    id: round.id || createEntityId('round'),
+    name: round.name || `Round ${roundIndex + 1}`,
+    columns: Array.isArray(round.columns)
+      ? round.columns.map((column, columnIndex) => ({
+          id: column.id || createEntityId('column'),
+          name: column.name || `Column ${columnIndex + 1}`,
+        }))
+      : [],
+  }))
+}
+
+function buildCollapsedState(questions: QuizDetail['questions'] | undefined, collapsed = true) {
+  return Object.fromEntries((questions ?? []).map((question) => [question.id, collapsed]))
 }
 
 function sanitizeQuestion(question: Question): Question {
@@ -99,6 +137,7 @@ export function QuizEditorPage() {
   const [accentInput, setAccentInput] = useState('#ff7a59')
   const [editorPinInput, setEditorPinInput] = useState('')
   const [editorPinTouched, setEditorPinTouched] = useState(false)
+  const [collapsedQuestionIds, setCollapsedQuestionIds] = useState<Record<number, boolean>>({})
   const importInputRef = useRef<HTMLInputElement | null>(null)
   const autosaveTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null)
   const autosaveInFlightRef = useRef(false)
@@ -120,12 +159,13 @@ export function QuizEditorPage() {
       t('editor.pinPrompt'),
     )
       .then((loadedQuiz) => {
-        setQuiz(loadedQuiz)
+        setQuiz({ ...loadedQuiz, boardLayout: sanitizeBoardLayout(loadedQuiz.boardLayout) })
         setAccentInput(loadedQuiz.accentColor)
         setEditorPinInput('')
         setEditorPinTouched(false)
         setError('')
         setSaveState('idle')
+        setCollapsedQuestionIds(buildCollapsedState(loadedQuiz.questions, true))
         quizMetaDirtyRef.current = false
         dirtyQuestionIdsRef.current.clear()
       })
@@ -186,6 +226,7 @@ export function QuizEditorPage() {
           mode: currentQuiz.mode,
           accentColor: currentQuiz.accentColor,
           isPublished: currentQuiz.isPublished,
+          boardLayout: currentQuiz.boardLayout,
           ...(editorPinTouched ? { editorPin: editorPinInput } : {}),
         }, currentQuizPin)
         if (editorPinTouched) {
@@ -261,7 +302,31 @@ export function QuizEditorPage() {
     })
   }
 
+  function patchBoardLayout(updater: (layout: QuizBoardRound[]) => QuizBoardRound[]) {
+    patchQuiz((current) => ({ ...current, boardLayout: sanitizeBoardLayout(updater(current.boardLayout || [])) }))
+  }
+
+  function toggleQuestionCollapsed(questionId: number) {
+    setCollapsedQuestionIds((current) => ({
+      ...current,
+      [questionId]: !current[questionId],
+    }))
+  }
+
+  function setAllQuestionsCollapsed(collapsed: boolean) {
+    setCollapsedQuestionIds(buildCollapsedState(quizDraftRef.current?.questions, collapsed))
+  }
+
   function setQuestionType(questionId: number, nextType: QuestionType) {
+    if (quizDraftRef.current?.mode === 'buzz') {
+      patchQuestion(questionId, (question) => ({
+        ...question,
+        type: 'text',
+        options: [],
+      }))
+      return
+    }
+
     patchQuestion(questionId, (question) => {
       if (nextType === 'text') {
         return {
@@ -395,6 +460,7 @@ export function QuizEditorPage() {
   }
 
   const questions = Array.isArray(quiz.questions) ? quiz.questions : []
+  const boardLayout = sanitizeBoardLayout(quiz.boardLayout)
 
   return (
     <section className="panel editor-page">
@@ -498,7 +564,16 @@ export function QuizEditorPage() {
             </button>
             <button
               className={`selection-card ${quiz.mode === 'buzz' ? 'active' : ''}`}
-              onClick={() => patchQuiz((current) => ({ ...current, mode: 'buzz' }))}
+              onClick={() => patchQuiz((current) => ({
+                ...current,
+                mode: 'buzz',
+                boardLayout: current.boardLayout.length > 0 ? current.boardLayout : [createBoardRound(0)],
+                questions: current.questions.map((question) => ({
+                  ...question,
+                  type: 'text',
+                  options: [],
+                })),
+              }))}
               type="button"
             >
               <strong>{t('admin.modeBuzz')}</strong>
@@ -553,6 +628,195 @@ export function QuizEditorPage() {
           </div>
         </div>
       </div>
+
+      {quiz.mode === 'buzz' ? (
+        <section className="question-editor-card board-layout-card">
+          <div className="inline-header">
+            <div>
+              <strong>{t('editor.boardBuilderTitle')}</strong>
+              <span>{t('editor.boardBuilderHint')}</span>
+            </div>
+            <button
+              className="ghost-button"
+              onClick={() => patchBoardLayout((current) => [...current, createBoardRound(current.length)])}
+              type="button"
+            >
+              {t('editor.addRound')}
+            </button>
+          </div>
+
+          <div className="round-planner">
+            {boardLayout.map((round, roundIndex) => (
+              <article className="round-card" key={round.id}>
+                <div className="inline-header">
+                  <label className="round-name-field">
+                    <span>{t('editor.roundName')}</span>
+                    <input
+                      onChange={(event) => {
+                        const nextName = event.target.value
+                        patchQuiz((current) => ({
+                          ...current,
+                          boardLayout: current.boardLayout.map((entry) => (entry.id === round.id ? { ...entry, name: nextName } : entry)),
+                          questions: current.questions.map((question) =>
+                            question.roundName === round.name ? { ...question, roundName: nextName } : question,
+                          ),
+                        }))
+                      }}
+                      value={round.name}
+                    />
+                  </label>
+                  <div className="action-row">
+                    <button
+                      className="ghost-button"
+                      disabled={roundIndex === 0}
+                      onClick={() => patchBoardLayout((current) => {
+                        const next = [...current]
+                        const [item] = next.splice(roundIndex, 1)
+                        next.splice(roundIndex - 1, 0, item)
+                        return next
+                      })}
+                      type="button"
+                    >
+                      {t('editor.moveUp')}
+                    </button>
+                    <button
+                      className="ghost-button"
+                      disabled={roundIndex === boardLayout.length - 1}
+                      onClick={() => patchBoardLayout((current) => {
+                        const next = [...current]
+                        const [item] = next.splice(roundIndex, 1)
+                        next.splice(roundIndex + 1, 0, item)
+                        return next
+                      })}
+                      type="button"
+                    >
+                      {t('editor.moveDown')}
+                    </button>
+                    <button
+                      className="ghost-button danger-button"
+                      onClick={() => {
+                        patchQuiz((current) => ({
+                          ...current,
+                          boardLayout: current.boardLayout.filter((entry) => entry.id !== round.id),
+                          questions: current.questions.map((question) =>
+                            question.roundName === round.name
+                              ? { ...question, roundName: '', columnName: '' }
+                              : question,
+                          ),
+                        }))
+                      }}
+                      type="button"
+                    >
+                      {t('editor.delete')}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="column-planner">
+                  {round.columns.map((column, columnIndex) => (
+                    <div className="column-chip-editor" key={column.id}>
+                      <input
+                        onChange={(event) => {
+                          const nextName = event.target.value
+                          patchQuiz((current) => ({
+                            ...current,
+                            boardLayout: current.boardLayout.map((entry) =>
+                              entry.id === round.id
+                                ? {
+                                    ...entry,
+                                    columns: entry.columns.map((candidate) =>
+                                      candidate.id === column.id ? { ...candidate, name: nextName } : candidate,
+                                    ),
+                                  }
+                                : entry,
+                            ),
+                            questions: current.questions.map((question) =>
+                              question.roundName === round.name && question.columnName === column.name
+                                ? { ...question, columnName: nextName }
+                                : question,
+                            ),
+                          }))
+                        }}
+                        placeholder={t('editor.columnName')}
+                        value={column.name}
+                      />
+                      <div className="action-row">
+                        <button
+                          className="ghost-button option-action"
+                          disabled={columnIndex === 0}
+                          onClick={() => patchBoardLayout((current) =>
+                            current.map((entry) => {
+                              if (entry.id !== round.id) return entry
+                              const nextColumns = [...entry.columns]
+                              const [item] = nextColumns.splice(columnIndex, 1)
+                              nextColumns.splice(columnIndex - 1, 0, item)
+                              return { ...entry, columns: nextColumns }
+                            }),
+                          )}
+                          type="button"
+                        >
+                          {t('editor.moveUp')}
+                        </button>
+                        <button
+                          className="ghost-button option-action"
+                          disabled={columnIndex === round.columns.length - 1}
+                          onClick={() => patchBoardLayout((current) =>
+                            current.map((entry) => {
+                              if (entry.id !== round.id) return entry
+                              const nextColumns = [...entry.columns]
+                              const [item] = nextColumns.splice(columnIndex, 1)
+                              nextColumns.splice(columnIndex + 1, 0, item)
+                              return { ...entry, columns: nextColumns }
+                            }),
+                          )}
+                          type="button"
+                        >
+                          {t('editor.moveDown')}
+                        </button>
+                        <button
+                          className="ghost-button option-action danger-button"
+                          onClick={() => {
+                            patchQuiz((current) => ({
+                              ...current,
+                              boardLayout: current.boardLayout.map((entry) =>
+                                entry.id === round.id
+                                  ? { ...entry, columns: entry.columns.filter((candidate) => candidate.id !== column.id) }
+                                  : entry,
+                              ),
+                              questions: current.questions.map((question) =>
+                                question.roundName === round.name && question.columnName === column.name
+                                  ? { ...question, columnName: '' }
+                                  : question,
+                              ),
+                            }))
+                          }}
+                          type="button"
+                        >
+                          {t('editor.removeOption')}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <button
+                  className="ghost-button"
+                  onClick={() => patchBoardLayout((current) =>
+                    current.map((entry) =>
+                      entry.id === round.id
+                        ? { ...entry, columns: [...entry.columns, createBoardColumn(`Column ${entry.columns.length + 1}`)] }
+                        : entry,
+                    ),
+                  )}
+                  type="button"
+                >
+                  {t('editor.addColumn')}
+                </button>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <div className="action-row">
         <input
@@ -619,10 +883,31 @@ export function QuizEditorPage() {
 
       {error ? <p className="error-text">{error}</p> : null}
 
+      <div className="action-row">
+        <button
+          className="ghost-button"
+          onClick={() => setAllQuestionsCollapsed(true)}
+          type="button"
+        >
+          {t('editor.collapseAllQuestions')}
+        </button>
+        <button
+          className="ghost-button"
+          onClick={() => setAllQuestionsCollapsed(false)}
+          type="button"
+        >
+          {t('editor.expandAllQuestions')}
+        </button>
+      </div>
+
       <div className="question-stack">
         {questions.map((question, index) => {
-          const isMultipleChoice = question.type === 'multiple_choice'
+          const isBuzzQuiz = quiz.mode === 'buzz'
+          const isMultipleChoice = !isBuzzQuiz && question.type === 'multiple_choice'
           const hasMedia = question.mediaType !== 'none'
+          const isCollapsed = Boolean(collapsedQuestionIds[question.id])
+          const selectedRound = boardLayout.find((round) => round.name === question.roundName) ?? null
+          const availableColumns = selectedRound?.columns ?? []
 
           return (
             <article className="question-editor-card question-editor-flow" key={question.id}>
@@ -635,6 +920,13 @@ export function QuizEditorPage() {
                 </div>
                 <button
                   className="ghost-button"
+                  onClick={() => toggleQuestionCollapsed(question.id)}
+                  type="button"
+                >
+                  {isCollapsed ? t('editor.expandQuestion') : t('editor.collapseQuestion')}
+                </button>
+                <button
+                  className="ghost-button"
                   onClick={async () => {
                     dirtyQuestionIdsRef.current.delete(question.id)
                     setBusy(true)
@@ -643,7 +935,8 @@ export function QuizEditorPage() {
                       await flushAutosave()
                       await api.deleteQuestion(token, quiz.id, question.id, getStoredQuizPin(quiz.id) || undefined)
                       const updatedQuiz = await api.getQuiz(token, quizId, getStoredQuizPin(quiz.id) || undefined)
-                      setQuiz(updatedQuiz)
+                      setQuiz({ ...updatedQuiz, boardLayout: sanitizeBoardLayout(updatedQuiz.boardLayout) })
+                      setCollapsedQuestionIds(buildCollapsedState(updatedQuiz.questions, true))
                     } catch (deleteError) {
                       setError(deleteError instanceof Error ? deleteError.message : 'Could not delete question')
                     } finally {
@@ -655,6 +948,9 @@ export function QuizEditorPage() {
                   {t('editor.delete')}
                 </button>
               </div>
+
+              {isCollapsed ? null : (
+                <>
 
               <div className="question-flow-step">
                 <div className="step-number">1</div>
@@ -688,25 +984,34 @@ export function QuizEditorPage() {
                 <div className="step-number">3</div>
                 <div className="step-body">
                   <strong>{t('editor.answerFormat')}</strong>
-                  <span>{t('editor.typeHint')}</span>
-                  <div className="selection-grid">
-                    <button
-                      className={`selection-card ${isMultipleChoice ? 'active' : ''}`}
-                      onClick={() => setQuestionType(question.id, 'multiple_choice')}
-                      type="button"
-                    >
-                      <strong>{t('editor.multipleChoice')}</strong>
-                      <span>{t('editor.multipleChoiceHint')}</span>
-                    </button>
-                    <button
-                      className={`selection-card ${question.type === 'text' ? 'active' : ''}`}
-                      onClick={() => setQuestionType(question.id, 'text')}
-                      type="button"
-                    >
+                  {isBuzzQuiz ? (
+                    <div className="helper-banner">
                       <strong>{t('editor.textInput')}</strong>
-                      <span>{t('editor.textInputHint')}</span>
-                    </button>
-                  </div>
+                      <span>{t('editor.buzzAnswerLocked')}</span>
+                    </div>
+                  ) : (
+                    <>
+                      <span>{t('editor.typeHint')}</span>
+                      <div className="selection-grid">
+                        <button
+                          className={`selection-card ${isMultipleChoice ? 'active' : ''}`}
+                          onClick={() => setQuestionType(question.id, 'multiple_choice')}
+                          type="button"
+                        >
+                          <strong>{t('editor.multipleChoice')}</strong>
+                          <span>{t('editor.multipleChoiceHint')}</span>
+                        </button>
+                        <button
+                          className={`selection-card ${question.type === 'text' ? 'active' : ''}`}
+                          onClick={() => setQuestionType(question.id, 'text')}
+                          type="button"
+                        >
+                          <strong>{t('editor.textInput')}</strong>
+                          <span>{t('editor.textInputHint')}</span>
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -819,16 +1124,52 @@ export function QuizEditorPage() {
                 <div className="step-number">6</div>
                 <div className="step-body">
                   <strong>{t('editor.columnName')}</strong>
-                  <span>{t('editor.buzzModeHint')}</span>
+                  <span>{isBuzzQuiz ? t('editor.boardAssignHint') : t('editor.buzzModeHint')}</span>
                   <div className="score-grid">
-                    <label>
-                      <span>{t('editor.columnName')}</span>
-                      <input
-                        onChange={(event) => patchQuestion(question.id, (current) => ({ ...current, columnName: event.target.value }))}
-                        placeholder={t('editor.columnNamePlaceholder')}
-                        value={question.columnName}
-                      />
-                    </label>
+                    {isBuzzQuiz ? (
+                      <>
+                        <label>
+                          <span>{t('editor.roundName')}</span>
+                          <select
+                            onChange={(event) =>
+                              patchQuestion(question.id, (current) => ({
+                                ...current,
+                                roundName: event.target.value,
+                                columnName: '',
+                              }))
+                            }
+                            value={question.roundName}
+                          >
+                            <option value="">{t('editor.unassignedRound')}</option>
+                            {boardLayout.map((round) => (
+                              <option key={round.id} value={round.name}>{round.name}</option>
+                            ))}
+                          </select>
+                        </label>
+                        <label>
+                          <span>{t('editor.columnName')}</span>
+                          <select
+                            disabled={!selectedRound}
+                            onChange={(event) => patchQuestion(question.id, (current) => ({ ...current, columnName: event.target.value }))}
+                            value={question.columnName}
+                          >
+                            <option value="">{t('editor.unassignedColumn')}</option>
+                            {availableColumns.map((column) => (
+                              <option key={column.id} value={column.name}>{column.name}</option>
+                            ))}
+                          </select>
+                        </label>
+                      </>
+                    ) : (
+                      <label>
+                        <span>{t('editor.columnName')}</span>
+                        <input
+                          onChange={(event) => patchQuestion(question.id, (current) => ({ ...current, columnName: event.target.value }))}
+                          placeholder={t('editor.columnNamePlaceholder')}
+                          value={question.columnName}
+                        />
+                      </label>
+                    )}
                     <label>
                       <span>{t('editor.specialType')}</span>
                       <select
@@ -881,6 +1222,81 @@ export function QuizEditorPage() {
                       />
                     </label>
                   </div>
+
+                  {(question.correctAnswerMediaType ?? 'none') !== 'none' ? (
+                    <div className="media-editor-block">
+                      <label className="file-trigger media-upload-trigger">
+                        <span>{t('editor.uploadMedia')}</span>
+                        <input
+                          accept="image/*,audio/*,video/*"
+                          onChange={async (event) => {
+                            const file = event.target.files?.[0]
+                            if (!file) return
+
+                            const uploadSizeError = getUploadSizeError(file)
+                            if (uploadSizeError) {
+                              setError(uploadSizeError)
+                              event.currentTarget.value = ''
+                              return
+                            }
+
+                            setError('')
+                            setMediaUploadProgress((current) => ({ ...current, [-question.id]: 0 }))
+
+                            try {
+                              const upload = await api.uploadQuizMedia(
+                                token,
+                                quiz.id,
+                                file,
+                                (progress) => setMediaUploadProgress((current) => ({ ...current, [-question.id]: progress })),
+                                getStoredQuizPin(quiz.id) || undefined,
+                              )
+
+                              patchQuestion(question.id, (current) => ({ ...current, correctAnswerMediaUrl: upload.url }))
+                            } catch (uploadError) {
+                              setError(uploadError instanceof Error ? uploadError.message : 'Media upload failed')
+                            } finally {
+                              setMediaUploadProgress((current) => {
+                                const next = { ...current }
+                                delete next[-question.id]
+                                return next
+                              })
+                              event.currentTarget.value = ''
+                            }
+                          }}
+                          type="file"
+                        />
+                      </label>
+
+                      {typeof mediaUploadProgress[-question.id] === 'number' ? (
+                        <div
+                          className="upload-progress"
+                          role="progressbar"
+                          aria-valuemax={100}
+                          aria-valuemin={0}
+                          aria-valuenow={mediaUploadProgress[-question.id]}
+                        >
+                          <div className="upload-progress-fill" style={{ width: `${mediaUploadProgress[-question.id]}%` }} />
+                          <span>{mediaUploadProgress[-question.id]}%</span>
+                        </div>
+                      ) : null}
+
+                      {question.correctAnswerMediaUrl ? (
+                        <div className="media-preview-panel">
+                          <strong>{t('editor.mediaPreview')}</strong>
+                          {question.correctAnswerMediaType === 'image' ? (
+                            <img alt="Answer media" className="media-visual" src={question.correctAnswerMediaUrl} />
+                          ) : null}
+                          {question.correctAnswerMediaType === 'video' ? (
+                            <video className="media-visual" controls src={question.correctAnswerMediaUrl} />
+                          ) : null}
+                          {question.correctAnswerMediaType === 'audio' ? (
+                            <audio controls src={question.correctAnswerMediaUrl} style={{ width: '100%' }} />
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               </div>
 
@@ -980,6 +1396,18 @@ export function QuizEditorPage() {
                   ) : null}
                 </div>
               </div>
+
+              <div className="action-row">
+                <button
+                  className="ghost-button"
+                  onClick={() => toggleQuestionCollapsed(question.id)}
+                  type="button"
+                >
+                  {t('editor.collapseQuestion')}
+                </button>
+              </div>
+                </>
+              )}
             </article>
           )
         })}
@@ -998,21 +1426,28 @@ export function QuizEditorPage() {
                 order: quiz.questions.length,
                 prompt: '',
                 helpText: '',
-                type: 'multiple_choice',
-                options: createDefaultOptions(4),
-                correctAnswer: 'A',
+                type: quiz.mode === 'buzz' ? 'text' : 'multiple_choice',
+                options: quiz.mode === 'buzz' ? [] : createDefaultOptions(4),
+                correctAnswer: quiz.mode === 'buzz' ? '' : 'A',
                 mediaType: 'none',
                 mediaUrl: '',
                 timeLimitSeconds: 20,
                 points: 100,
                 penaltyPoints: 100,
+                roundName: '',
                 columnName: '',
                 specialType: 'normal',
                 correctAnswerMediaType: 'none',
                 correctAnswerMediaUrl: '',
               }, getStoredQuizPin(quiz.id) || undefined)
               const updatedQuiz = await api.getQuiz(token, quizId, getStoredQuizPin(quiz.id) || undefined)
-              setQuiz(updatedQuiz)
+              setQuiz({ ...updatedQuiz, boardLayout: sanitizeBoardLayout(updatedQuiz.boardLayout) })
+              const nextCollapsedState = buildCollapsedState(updatedQuiz.questions, true)
+              const newestQuestion = updatedQuiz.questions[updatedQuiz.questions.length - 1]
+              if (newestQuestion) {
+                nextCollapsedState[newestQuestion.id] = false
+              }
+              setCollapsedQuestionIds(nextCollapsedState)
             } catch (createError) {
               setError(createError instanceof Error ? createError.message : 'Could not add question')
             } finally {

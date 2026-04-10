@@ -66,6 +66,11 @@ module.exports = (sequelize, DataTypes) =>
         allowNull: false,
         defaultValue: 100,
       },
+      roundName: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        defaultValue: '',
+      },
       columnName: {
         type: DataTypes.STRING,
         allowNull: false,

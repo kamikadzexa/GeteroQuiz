@@ -25,14 +25,36 @@ export function QuizPlayPage() {
   const [error, setError] = useState('')
   const [wagerInput, setWagerInput] = useState('')
   const [wagerSubmitted, setWagerSubmitted] = useState(false)
+  const [splashQueue, setSplashQueue] = useState<Array<{ title: string; subtitle?: string; tone?: 'round' | 'special' }>>([])
+  const [activeSplash, setActiveSplash] = useState<{ title: string; subtitle?: string; tone?: 'round' | 'special' } | null>(null)
 
   const buzzTextRef = useRef('')
+  const splashTimerRef = useRef<number | null>(null)
+  const previousQuestionRef = useRef<{ id: number | null; roundName: string | null }>({ id: null, roundName: null })
+  const announcedRoundRef = useRef<string | null>(null)
 
   const questionSecondsLeft = useCountdown(
     session?.phase === 'open' ? session.closesAt : null,
     session?.serverNow ?? null,
   )
   const autoAdvanceSecondsLeft = useCountdown(session?.autoAdvanceAt ?? null, session?.serverNow ?? null)
+
+  const pushSplashes = useCallback((items: Array<{ title: string; subtitle?: string; tone?: 'round' | 'special' }>) => {
+    if (items.length === 0) return
+
+    setActiveSplash((currentActive) => {
+      if (currentActive) {
+        setSplashQueue((currentQueue) => [...currentQueue, ...items])
+        return currentActive
+      }
+
+      const [firstItem, ...rest] = items
+      if (rest.length > 0) {
+        setSplashQueue((currentQueue) => [...currentQueue, ...rest])
+      }
+      return firstItem
+    })
+  }, [])
 
   const emitSocket = useCallback((event: string, payload: Record<string, unknown>) => {
     const socket = getSocket()
@@ -143,6 +165,87 @@ export function QuizPlayPage() {
     }
   }, [session?.stakesPhase])
 
+  useEffect(() => {
+    return () => {
+      if (splashTimerRef.current) window.clearTimeout(splashTimerRef.current)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (activeSplash) {
+      splashTimerRef.current = window.setTimeout(() => {
+        setActiveSplash(null)
+        splashTimerRef.current = null
+      }, 2200)
+
+      return () => {
+        if (splashTimerRef.current) {
+          window.clearTimeout(splashTimerRef.current)
+          splashTimerRef.current = null
+        }
+      }
+    }
+
+    if (splashQueue.length === 0) return
+
+    const [nextSplash, ...remaining] = splashQueue
+    setActiveSplash(nextSplash)
+    setSplashQueue(remaining)
+  }, [activeSplash, splashQueue])
+
+  useEffect(() => {
+    if (!session || session.mode !== 'buzz' || session.phase !== 'waiting' || session.status !== 'live') return
+    if (!session.upcomingRoundName || announcedRoundRef.current === session.upcomingRoundName) return
+
+    announcedRoundRef.current = session.upcomingRoundName
+    pushSplashes([{
+      title: session.upcomingRoundName,
+      subtitle: t('play.roundStart'),
+      tone: 'round',
+    }])
+  }, [pushSplashes, session, t])
+
+  useEffect(() => {
+    if (!session || session.mode !== 'buzz' || session.phase !== 'open' || !session.currentQuestion) return
+
+    const previous = previousQuestionRef.current
+    const currentQuestion = session.currentQuestion
+
+    if (previous.id === currentQuestion.id) return
+
+    const nextQueue: Array<{ title: string; subtitle?: string; tone?: 'round' | 'special' }> = []
+
+    if (currentQuestion.roundName && currentQuestion.roundName !== previous.roundName) {
+      announcedRoundRef.current = currentQuestion.roundName
+      nextQueue.push({
+        title: currentQuestion.roundName,
+        subtitle: t('play.roundStart'),
+        tone: 'round',
+      })
+    }
+
+    if (currentQuestion.specialType === 'cat_in_bag') {
+      nextQueue.push({
+        title: t('play.catInBagTitle'),
+        subtitle: t('play.specialReveal'),
+        tone: 'special',
+      })
+    } else if (currentQuestion.specialType === 'stakes') {
+      nextQueue.push({
+        title: t('play.stakesTitle'),
+        subtitle: t('play.specialReveal'),
+        tone: 'special',
+      })
+    }
+
+    pushSplashes(nextQueue)
+
+    previousQuestionRef.current = {
+      id: currentQuestion.id,
+      roundName: currentQuestion.roundName || null,
+    }
+  }, [pushSplashes, session, t])
+
   if (!player) return null
 
   const currentQuestion = session?.currentQuestion ?? null
@@ -201,6 +304,14 @@ export function QuizPlayPage() {
     ? currentQuestion.options.find((option) => option.id === selectedAnswerId) ?? null
     : null
   const showBuzzBoard = isBuzzMode && session?.status === 'live' && session.phase === 'waiting'
+  const shouldShowQuestionMedia = Boolean(
+    currentQuestion && !(
+      session?.phase === 'review' &&
+      currentQuestion.correctAnswerMediaType &&
+      currentQuestion.correctAnswerMediaType !== 'none' &&
+      currentQuestion.correctAnswerMediaUrl
+    ),
+  )
 
   const getOptionClassName = (option: QuestionOption) => {
     if (!session) return 'option-button'
@@ -220,6 +331,15 @@ export function QuizPlayPage() {
   return (
     <div className="play-layout">
       <section className="panel game-panel">
+        {activeSplash ? (
+          <div className={`board-splash-overlay ${activeSplash.tone === 'special' ? 'special' : 'round'}`}>
+            <div className="board-splash-card">
+              {activeSplash.subtitle ? <span className="eyebrow">{activeSplash.subtitle}</span> : null}
+              <h2>{activeSplash.title}</h2>
+            </div>
+          </div>
+        ) : null}
+
         <div className="status-strip">
           <div>
             <span className="eyebrow">{session?.title || t('common.loading')}</span>
@@ -297,9 +417,10 @@ export function QuizPlayPage() {
                 : ''}
               {currentQuestion.columnName ? ` - ${currentQuestion.columnName}` : ''}
             </span>
+            {currentQuestion.roundName ? <span className="round-label">{currentQuestion.roundName}</span> : null}
             <h2>{currentQuestion.prompt}</h2>
             {currentQuestion.helpText ? <p className="helper-text">{currentQuestion.helpText}</p> : null}
-            <QuestionMedia question={currentQuestion} />
+            {shouldShowQuestionMedia ? <QuestionMedia question={currentQuestion} /> : null}
 
             {isBuzzMode && session.catInBagPhase === 'selecting' ? (
               <div className="special-phase-panel">
@@ -574,27 +695,23 @@ export function QuizPlayPage() {
             ) : null}
 
             {session.phase === 'review' && isBuzzMode ? (
-              <div className="text-review-card">
-                <div>
-                  <strong>{t('play.yourAnswer')}</strong>
-                  <p>{viewerAnswer?.submittedAnswer || '-'}</p>
-                </div>
+              <div className="answer-reveal-panel">
                 <div>
                   <strong>{t('play.correctText')}</strong>
-                  <p>{currentQuestion.correctAnswer || '-'}</p>
+                  <p className="correct-answer-text">{currentQuestion.correctAnswer || '-'}</p>
                 </div>
                 {currentQuestion.correctAnswerMediaType && currentQuestion.correctAnswerMediaType !== 'none' && currentQuestion.correctAnswerMediaUrl ? (
-                  <div style={{ gridColumn: '1 / -1' }}>
+                  <div className="media-block answer-reveal-media">
                     {currentQuestion.correctAnswerMediaType === 'image' && (
                       <img
                         alt="Correct answer"
                         className="media-visual"
                         src={currentQuestion.correctAnswerMediaUrl}
-                        style={{ maxHeight: '16rem', borderRadius: '0.75rem', width: '100%', objectFit: 'contain' }}
+                        style={{ width: '100%', objectFit: 'contain' }}
                       />
                     )}
                     {currentQuestion.correctAnswerMediaType === 'video' && (
-                      <video className="media-visual" controls src={currentQuestion.correctAnswerMediaUrl} style={{ width: '100%', borderRadius: '0.75rem' }} />
+                      <video className="media-visual" controls src={currentQuestion.correctAnswerMediaUrl} style={{ width: '100%' }} />
                     )}
                   </div>
                 ) : null}

@@ -226,6 +226,32 @@ async function assignBoardSelector(req, res, next) {
   }
 }
 
+async function selectBoardQuestion(req, res, next) {
+  try {
+    await getSessionQuizForRequest(req, req.params.sessionId);
+    await req.app.locals.runtimeService.adminSelectBoardQuestion({
+      sessionId: req.params.sessionId,
+      questionId: req.body.questionId,
+    });
+    return res.status(204).send();
+  } catch (error) {
+    return next(error);
+  }
+}
+
+async function assignCatInBag(req, res, next) {
+  try {
+    await getSessionQuizForRequest(req, req.params.sessionId);
+    await req.app.locals.runtimeService.adminAssignCatInBag({
+      sessionId: req.params.sessionId,
+      targetPlayerId: req.body.playerId,
+    });
+    return res.status(204).send();
+  } catch (error) {
+    return next(error);
+  }
+}
+
 async function closeStakesWager(req, res, next) {
   try {
     await getSessionQuizForRequest(req, req.params.sessionId);
@@ -335,5 +361,7 @@ module.exports = {
   deleteSession,
   adjustScore,
   assignBoardSelector,
+  selectBoardQuestion,
+  assignCatInBag,
   closeStakesWager,
 };

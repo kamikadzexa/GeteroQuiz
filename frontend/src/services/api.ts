@@ -334,6 +334,18 @@ export const api = {
       { method: 'POST', body: JSON.stringify({ playerId }), quizPin },
       token,
     ),
+  selectBoardQuestion: (token: string, sessionId: number, questionId: number, quizPin?: string) =>
+    request(
+      `/sessions/${sessionId}/board/select-question`,
+      { method: 'POST', body: JSON.stringify({ questionId }), quizPin },
+      token,
+    ),
+  assignCatInBag: (token: string, sessionId: number, playerId: number, quizPin?: string) =>
+    request(
+      `/sessions/${sessionId}/board/assign-cat-in-bag`,
+      { method: 'POST', body: JSON.stringify({ playerId }), quizPin },
+      token,
+    ),
   closeStakesWager: (token: string, sessionId: number, quizPin?: string) =>
     request(`/sessions/${sessionId}/board/close-stakes`, { method: 'POST', quizPin }, token),
   deleteSession: (token: string, sessionId: number, quizPin?: string) =>

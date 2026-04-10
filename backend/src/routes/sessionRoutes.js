@@ -19,6 +19,8 @@ const {
   deleteSession,
   adjustScore,
   assignBoardSelector,
+  selectBoardQuestion,
+  assignCatInBag,
   closeStakesWager,
 } = require('../controllers/sessionController');
 const { requireStaff } = require('../middleware/auth');
@@ -41,6 +43,8 @@ router.post('/:sessionId/auto-advance', requireStaff, updateAutoAdvance);
 router.post('/:sessionId/answers/:answerId/judge', requireStaff, judgeAnswer);
 router.post('/:sessionId/buzz/judge', requireStaff, judgeBuzz);
 router.post('/:sessionId/board/assign-selector', requireStaff, assignBoardSelector);
+router.post('/:sessionId/board/select-question', requireStaff, selectBoardQuestion);
+router.post('/:sessionId/board/assign-cat-in-bag', requireStaff, assignCatInBag);
 router.post('/:sessionId/board/close-stakes', requireStaff, closeStakesWager);
 router.post('/:sessionId/players/:playerId/adjust-score', requireStaff, adjustScore);
 router.get('/:sessionId/players/:playerId', requireStaff, assistPlayer);

@@ -29,6 +29,7 @@ function sanitizeQuestion(question, phase) {
     timeLimitSeconds: question.timeLimitSeconds,
     points: question.points,
     penaltyPoints: question.penaltyPoints,
+    roundName: question.roundName ?? '',
     columnName: question.columnName ?? '',
     specialType: question.specialType ?? 'normal',
   };

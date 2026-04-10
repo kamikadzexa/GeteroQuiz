@@ -63,6 +63,8 @@
     "boardOtherTurn": "выбирает вопрос…",
     "boardNoSelector": "Ожидаем, пока ведущий назначит выбирающего",
     "boardAnswered": "Отвечено",
+    "roundStart": "Начинается раунд",
+    "specialReveal": "Специальный вопрос",
     "catInBagTitle": "Кот в мешке!",
     "catInBagPrompt": "Выберите игрока, которому достанется вопрос:",
     "catInBagAssigned": "Вам достался вопрос!",
@@ -182,6 +184,10 @@
     "newPassword": "Новый пароль",
     "passwordOptional": "Оставьте пустым, чтобы не менять пароль",
     "saveUser": "Сохранить пользователя",
+    "boardControl": "Управление доской",
+    "boardControlHint": "Вы можете выбрать вопрос сами или оставить выбор назначенному игроку.",
+    "catInBagAssignTitle": "Кому достанется вопрос",
+    "catInBagAssignHint": "Выберите игрока, который должен отвечать на «кота в мешке».",
     "role": {
       "admin": "Админ",
       "editor": "Редактор"
@@ -276,6 +282,19 @@
     "specialTypeStakes": "Ставки",
     "correctAnswerMedia": "Изображение/видео правильного ответа",
     "correctAnswerMediaType": "Тип медиа ответа",
-    "correctAnswerMediaUrl": "Ссылка на медиа ответа"
+    "correctAnswerMediaUrl": "Ссылка на медиа ответа",
+    "boardBuilderTitle": "Планировщик доски",
+    "boardBuilderHint": "Сначала создайте раунды и колонки, затем назначайте вопросы через выпадающие списки ниже.",
+    "addRound": "Добавить раунд",
+    "addColumn": "Добавить колонку",
+    "roundName": "Раунд",
+    "boardAssignHint": "Назначьте этот вопрос раунду и колонке из схемы доски.",
+    "unassignedRound": "Раунд не выбран",
+    "unassignedColumn": "Колонка не выбрана",
+    "collapseQuestion": "Свернуть",
+    "expandQuestion": "Развернуть",
+    "collapseAllQuestions": "Свернуть все",
+    "expandAllQuestions": "Развернуть все",
+    "buzzAnswerLocked": "В режиме кнопки ответы всегда текстовые. Варианты ответа доступны только для классического режима."
   }
 }

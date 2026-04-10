@@ -26,6 +26,7 @@ async function ensureQuestionColumns() {
   if (!table) return;
 
   const adds = [
+    ['roundName', { type: DataTypes.STRING, allowNull: true, defaultValue: '' }],
     ['columnName', { type: DataTypes.STRING, allowNull: true, defaultValue: '' }],
     ['specialType', { type: DataTypes.STRING, allowNull: true, defaultValue: 'normal' }],
     ['correctAnswerMediaType', { type: DataTypes.STRING, allowNull: true, defaultValue: 'none' }],
@@ -51,6 +52,14 @@ async function ensureQuizStorageColumn() {
     await queryInterface.addColumn('quizzes', 'storageKey', {
       type: DataTypes.STRING,
       allowNull: true,
+    });
+  }
+
+  if (!quizTable.boardLayout) {
+    await queryInterface.addColumn('quizzes', 'boardLayout', {
+      type: DataTypes.JSON,
+      allowNull: false,
+      defaultValue: [],
     });
   }
 

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { BuzzBoard } from '../components/shared/BuzzBoard'
 import { LeaderboardCard } from '../components/shared/LeaderboardCard'
 import { QuestionMedia } from '../components/shared/QuestionMedia'
 import { useAuth } from '../context/AuthContext'
@@ -15,6 +16,40 @@ function PlayerAvatar({ avatar, name }: { avatar: string; name: string }) {
     return <span className="avatar emoji" style={{ width: '2rem', height: '2rem', fontSize: '1rem' }}>{avatar.replace('emoji:', '')}</span>
   }
   return <img alt={name} className="avatar" src={assetUrl(avatar)} style={{ width: '2rem', height: '2rem' }} />
+}
+
+function CorrectAnswerPanel({
+  title,
+  answer,
+  mediaType,
+  mediaUrl,
+}: {
+  title: string
+  answer: string | null
+  mediaType: 'none' | 'image' | 'audio' | 'video'
+  mediaUrl: string
+}) {
+  if (!answer && (!mediaType || mediaType === 'none' || !mediaUrl)) return null
+
+  return (
+    <div className="answer-reveal-panel">
+      <div>
+        <span className="eyebrow">{title}</span>
+        <p className="correct-answer-text">{answer || '-'}</p>
+      </div>
+      {mediaType && mediaType !== 'none' && mediaUrl ? (
+        <div className="media-block answer-reveal-media">
+          {mediaType === 'image' ? (
+            <img alt="Correct answer" className="media-visual" src={mediaUrl} style={{ width: '100%', objectFit: 'contain' }} />
+          ) : mediaType === 'video' ? (
+            <video className="media-visual" controls src={mediaUrl} style={{ width: '100%' }} />
+          ) : (
+            <audio controls src={mediaUrl} style={{ width: '100%' }} />
+          )}
+        </div>
+      ) : null}
+    </div>
+  )
 }
 
 export function AdminSessionPage() {
@@ -176,6 +211,22 @@ export function AdminSessionPage() {
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not assign selector') }
   }
 
+  async function handleAdminSelectQuestion(questionId: number) {
+    if (!token || !sessionState) return
+    try {
+      setError('')
+      await api.selectBoardQuestion(token, sessionState.id, questionId, getStoredSessionPin(sessionId) || undefined)
+    } catch (e) { setError(e instanceof Error ? e.message : 'Could not select question') }
+  }
+
+  async function handleAdminAssignCatInBag(playerId: number) {
+    if (!token || !sessionState) return
+    try {
+      setError('')
+      await api.assignCatInBag(token, sessionState.id, playerId, getStoredSessionPin(sessionId) || undefined)
+    } catch (e) { setError(e instanceof Error ? e.message : 'Could not assign player') }
+  }
+
   async function handleCloseStakes() {
     if (!token || !sessionState) return
     try {
@@ -263,6 +314,10 @@ export function AdminSessionPage() {
   const boardSelectorPlayer = sessionState.boardSelectingPlayerId != null
     ? sessionState.players.find((p) => p.id === sessionState.boardSelectingPlayerId) ?? null
     : null
+  const showAdminBoard = isBuzzMode && sessionState.status === 'live' && sessionState.phase === 'waiting'
+  const showCatInBagAdminPicker = isBuzzMode
+    && sessionState.catInBagPhase === 'selecting'
+    && sessionState.currentQuestion?.specialType === 'cat_in_bag'
 
   return (
     <div className="admin-session-layout">
@@ -283,25 +338,12 @@ export function AdminSessionPage() {
               </p>
             </div>
             {/* Correct answer for admin */}
-            {sessionState.correctAnswer ? (
-              <div className="correct-answer-box">
-                <span className="eyebrow">{t('admin.correctAnswer')}</span>
-                <p className="correct-answer-text">{sessionState.correctAnswer}</p>
-                {sessionState.correctAnswerMediaType && sessionState.correctAnswerMediaType !== 'none' && sessionState.correctAnswerMediaUrl ? (
-                  <div className="media-block" style={{ marginTop: '0.5rem' }}>
-                    {sessionState.correctAnswerMediaType === 'image' && (
-                      <img alt="Answer" className="media-visual" src={sessionState.correctAnswerMediaUrl} />
-                    )}
-                    {sessionState.correctAnswerMediaType === 'video' && (
-                      <video className="media-visual" controls src={sessionState.correctAnswerMediaUrl} />
-                    )}
-                    {sessionState.correctAnswerMediaType === 'audio' && (
-                      <audio controls src={sessionState.correctAnswerMediaUrl} style={{ width: '100%' }} />
-                    )}
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
+            <CorrectAnswerPanel
+              answer={sessionState.correctAnswer}
+              mediaType={sessionState.correctAnswerMediaType}
+              mediaUrl={sessionState.correctAnswerMediaUrl}
+              title={t('admin.correctAnswer')}
+            />
             <div className="action-row">
               <button
                 className="cta-button secondary"
@@ -402,6 +444,55 @@ export function AdminSessionPage() {
           </div>
         ) : null}
 
+        {showAdminBoard ? (
+          <div className="automation-card admin-board-card">
+            <div className="inline-header">
+              <div>
+                <strong>{t('admin.boardControl')}</strong>
+                <p className="helper-text">{t('admin.boardControlHint')}</p>
+              </div>
+              {sessionState.upcomingRoundName ? <span className="round-label">{sessionState.upcomingRoundName}</span> : null}
+            </div>
+            <BuzzBoard
+              allowDirectSelect
+              answeredIds={sessionState.boardAnsweredQuestionIds}
+              columns={sessionState.boardColumns}
+              emptyHint={t('admin.boardControlHint')}
+              isWaiting
+              onSelectTile={(questionId) => { void handleAdminSelectQuestion(questionId) }}
+              selectingHint={boardSelectorPlayer ? `${boardSelectorPlayer.displayName} is selecting...` : undefined}
+              selectingPlayerId={sessionState.boardSelectingPlayerId}
+              viewerPlayerId={null}
+              viewerScore={0}
+              yourTurnHint={t('admin.openNextQuestion')}
+            />
+          </div>
+        ) : null}
+
+        {showCatInBagAdminPicker ? (
+          <div className="special-phase-panel">
+            <div className="inline-header">
+              <div>
+                <strong>{t('admin.catInBagAssignTitle')}</strong>
+                <p className="helper-text">{t('admin.catInBagAssignHint')}</p>
+              </div>
+              {sessionState.currentQuestion?.roundName ? <span className="round-label">{sessionState.currentQuestion.roundName}</span> : null}
+            </div>
+            <div className="cib-player-grid">
+              {sessionState.players.map((player) => (
+                <button
+                  className="ghost-button cib-player-btn"
+                  key={player.id}
+                  onClick={() => { void handleAdminAssignCatInBag(player.id) }}
+                  type="button"
+                >
+                  {player.displayName}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
         <div className="automation-card">
           <div className="inline-header">
             <div>
@@ -465,6 +556,7 @@ export function AdminSessionPage() {
         {sessionState.currentQuestion ? (
           <div className="question-card">
             <span className="eyebrow">{sessionState.mode.toUpperCase()}{sessionState.currentQuestion.specialType && sessionState.currentQuestion.specialType !== 'normal' ? ` · ${sessionState.currentQuestion.specialType.replace('_', ' ').toUpperCase()}` : ''}</span>
+            {sessionState.currentQuestion.roundName ? <span className="round-label">{sessionState.currentQuestion.roundName}</span> : null}
             <h2>{sessionState.currentQuestion.prompt}</h2>
             {sessionState.currentQuestion.helpText ? <p className="helper-text">{sessionState.currentQuestion.helpText}</p> : null}
             <QuestionMedia question={sessionState.currentQuestion} />
@@ -474,25 +566,12 @@ export function AdminSessionPage() {
               <span className="chip">{sessionState.currentQuestion.points} pts</span>
             </div>
             {/* Correct answer always visible to admin */}
-            {sessionState.correctAnswer ? (
-              <div className="correct-answer-box">
-                <span className="eyebrow">{t('admin.correctAnswer')}</span>
-                <p className="correct-answer-text">{sessionState.correctAnswer}</p>
-                {sessionState.correctAnswerMediaType && sessionState.correctAnswerMediaType !== 'none' && sessionState.correctAnswerMediaUrl ? (
-                  <div className="media-block" style={{ marginTop: '0.5rem' }}>
-                    {sessionState.correctAnswerMediaType === 'image' && (
-                      <img alt="Answer" className="media-visual" src={sessionState.correctAnswerMediaUrl} />
-                    )}
-                    {sessionState.correctAnswerMediaType === 'video' && (
-                      <video className="media-visual" controls src={sessionState.correctAnswerMediaUrl} />
-                    )}
-                    {sessionState.correctAnswerMediaType === 'audio' && (
-                      <audio controls src={sessionState.correctAnswerMediaUrl} style={{ width: '100%' }} />
-                    )}
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
+            <CorrectAnswerPanel
+              answer={sessionState.correctAnswer}
+              mediaType={sessionState.correctAnswerMediaType}
+              mediaUrl={sessionState.correctAnswerMediaUrl}
+              title={t('admin.correctAnswer')}
+            />
           </div>
         ) : (
           <div className="question-card waiting-card">
@@ -597,6 +676,13 @@ export function AdminSessionPage() {
           <h2>{t('admin.review')}</h2>
           {activeBuzzAnswer ? <span className="chip active">{activeBuzzAnswer.playerName}</span> : null}
         </div>
+
+        <CorrectAnswerPanel
+          answer={sessionState.correctAnswer}
+          mediaType={sessionState.correctAnswerMediaType}
+          mediaUrl={sessionState.correctAnswerMediaUrl}
+          title={t('admin.correctAnswer')}
+        />
 
         <div className="review-list">
           {sessionState.answers.map((answer) => (

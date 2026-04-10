@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { BuzzBoard } from '../components/shared/BuzzBoard'
 import { LeaderboardCard } from '../components/shared/LeaderboardCard'
 import { QuestionMedia } from '../components/shared/QuestionMedia'
 import { useI18n } from '../context/I18nContext'
@@ -13,6 +14,10 @@ export function DisplaySessionPage() {
   const { t } = useI18n()
   const [session, setSession] = useState<SessionState | null>(null)
   const [error, setError] = useState('')
+  const [splashQueue, setSplashQueue] = useState<Array<{ title: string; subtitle?: string; tone?: 'round' | 'special' }>>([])
+  const [activeSplash, setActiveSplash] = useState<{ title: string; subtitle?: string; tone?: 'round' | 'special' } | null>(null)
+  const previousQuestionRef = useRef<{ id: number | null; roundName: string | null }>({ id: null, roundName: null })
+  const announcedRoundRef = useRef<string | null>(null)
   const questionSecondsLeft = useCountdown(
     session?.phase === 'open' ? session.closesAt : null,
     session?.serverNow ?? null,
@@ -49,6 +54,96 @@ export function DisplaySessionPage() {
     if (!session?.currentQuestion || session.currentQuestion.type !== 'multiple_choice') return []
     return session.currentQuestion.options
   }, [session])
+  const isBuzzWaiting = session?.mode === 'buzz' && session.status === 'live' && session.phase === 'waiting'
+  const shouldShowQuestionMedia = Boolean(
+    session?.currentQuestion && !(
+      session.phase === 'review' &&
+      session.currentQuestion.correctAnswerMediaType &&
+      session.currentQuestion.correctAnswerMediaType !== 'none' &&
+      session.currentQuestion.correctAnswerMediaUrl
+    ),
+  )
+  const boardSelectorName = session?.boardSelectingPlayerId != null
+    ? session.leaderboard.find((entry) => entry.playerId === session.boardSelectingPlayerId)?.displayName
+    : undefined
+
+  const pushSplashes = useMemo(
+    () => (items: Array<{ title: string; subtitle?: string; tone?: 'round' | 'special' }>) => {
+      if (items.length === 0) return
+
+      setActiveSplash((currentActive) => {
+        if (currentActive) {
+          setSplashQueue((currentQueue) => [...currentQueue, ...items])
+          return currentActive
+        }
+
+        const [firstItem, ...rest] = items
+        if (rest.length > 0) {
+          setSplashQueue((currentQueue) => [...currentQueue, ...rest])
+        }
+        return firstItem
+      })
+    },
+    [],
+  )
+
+  useEffect(() => {
+    if (activeSplash) {
+      const timer = window.setTimeout(() => setActiveSplash(null), 2200)
+      return () => window.clearTimeout(timer)
+    }
+
+    if (splashQueue.length === 0) return
+
+    const [nextSplash, ...remaining] = splashQueue
+    setActiveSplash(nextSplash)
+    setSplashQueue(remaining)
+  }, [activeSplash, splashQueue])
+
+  useEffect(() => {
+    if (!session || session.mode !== 'buzz' || session.phase !== 'waiting' || session.status !== 'live') return
+    if (!session.upcomingRoundName || announcedRoundRef.current === session.upcomingRoundName) return
+
+    announcedRoundRef.current = session.upcomingRoundName
+    pushSplashes([{
+      title: session.upcomingRoundName,
+      subtitle: t('play.roundStart'),
+      tone: 'round',
+    }])
+  }, [pushSplashes, session, t])
+
+  useEffect(() => {
+    if (!session || session.mode !== 'buzz' || session.phase !== 'open' || !session.currentQuestion) return
+
+    const previous = previousQuestionRef.current
+    const currentQuestion = session.currentQuestion
+
+    if (previous.id === currentQuestion.id) return
+
+    const nextQueue: Array<{ title: string; subtitle?: string; tone?: 'round' | 'special' }> = []
+
+    if (currentQuestion.roundName && currentQuestion.roundName !== previous.roundName) {
+      announcedRoundRef.current = currentQuestion.roundName
+      nextQueue.push({
+        title: currentQuestion.roundName,
+        subtitle: t('play.roundStart'),
+        tone: 'round',
+      })
+    }
+
+    if (currentQuestion.specialType === 'cat_in_bag') {
+      nextQueue.push({ title: t('play.catInBagTitle'), subtitle: t('play.specialReveal'), tone: 'special' })
+    } else if (currentQuestion.specialType === 'stakes') {
+      nextQueue.push({ title: t('play.stakesTitle'), subtitle: t('play.specialReveal'), tone: 'special' })
+    }
+
+    pushSplashes(nextQueue)
+
+    previousQuestionRef.current = {
+      id: currentQuestion.id,
+      roundName: currentQuestion.roundName || null,
+    }
+  }, [pushSplashes, session, t])
 
   useEffect(() => {
     let active = true
@@ -93,6 +188,15 @@ export function DisplaySessionPage() {
   return (
     <div className="display-layout">
       <section className="panel display-main-panel">
+        {activeSplash ? (
+          <div className={`board-splash-overlay ${activeSplash.tone === 'special' ? 'special' : 'round'}`}>
+            <div className="board-splash-card">
+              {activeSplash.subtitle ? <span className="eyebrow">{activeSplash.subtitle}</span> : null}
+              <h2>{activeSplash.title}</h2>
+            </div>
+          </div>
+        ) : null}
+
         <div className="inline-header">
           <div>
             <span className="eyebrow">{t('display.badge')}</span>
@@ -125,12 +229,31 @@ export function DisplaySessionPage() {
             <h2>{t('play.finalHeading')}</h2>
             <LeaderboardCard entries={session.leaderboard} />
           </div>
+        ) : isBuzzWaiting ? (
+          <div className="question-card display-question-card">
+            <span className="eyebrow">{t('play.boardTitle')}</span>
+            {session.upcomingRoundName ? <span className="round-label">{session.upcomingRoundName}</span> : null}
+            <h2>{t('play.boardTitle')}</h2>
+            <p className="helper-text">{t('play.waitingCopy')}</p>
+            <BuzzBoard
+              answeredIds={session.boardAnsweredQuestionIds}
+              columns={session.boardColumns}
+              emptyHint={t('play.boardNoSelector')}
+              isWaiting
+              selectingHint={boardSelectorName ? `${boardSelectorName} ${t('play.boardOtherTurn')}` : undefined}
+              selectingPlayerId={session.boardSelectingPlayerId}
+              selectorName={boardSelectorName}
+              viewerPlayerId={null}
+              viewerScore={0}
+            />
+          </div>
         ) : session.currentQuestion ? (
           <div className="question-card display-question-card">
             <span className="eyebrow">{session.mode.toUpperCase()}</span>
+            {session.currentQuestion.roundName ? <span className="round-label">{session.currentQuestion.roundName}</span> : null}
             <h2>{session.currentQuestion.prompt}</h2>
             {session.currentQuestion.helpText ? <p className="helper-text">{session.currentQuestion.helpText}</p> : null}
-            <QuestionMedia question={session.currentQuestion} />
+            {shouldShowQuestionMedia ? <QuestionMedia question={session.currentQuestion} /> : null}
 
             {questionOptions.length > 0 ? (
               <div className="display-options-grid">
@@ -149,11 +272,22 @@ export function DisplaySessionPage() {
                 })}
               </div>
             ) : session.currentQuestion.type === 'text' && session.phase === 'review' ? (
-              <div className="text-review-card">
+              <div className="answer-reveal-panel">
                 <div>
                   <strong>{t('play.correctText')}</strong>
-                  <p>{session.currentQuestion.correctAnswer || '-'}</p>
+                  <p className="correct-answer-text">{session.currentQuestion.correctAnswer || '-'}</p>
                 </div>
+                {session.currentQuestion.correctAnswerMediaType && session.currentQuestion.correctAnswerMediaType !== 'none' && session.currentQuestion.correctAnswerMediaUrl ? (
+                  <div className="media-block answer-reveal-media">
+                    {session.currentQuestion.correctAnswerMediaType === 'image' ? (
+                      <img alt="Correct answer" className="media-visual" src={session.currentQuestion.correctAnswerMediaUrl} style={{ width: '100%', objectFit: 'contain' }} />
+                    ) : session.currentQuestion.correctAnswerMediaType === 'video' ? (
+                      <video className="media-visual" controls src={session.currentQuestion.correctAnswerMediaUrl} style={{ width: '100%' }} />
+                    ) : (
+                      <audio controls src={session.currentQuestion.correctAnswerMediaUrl} style={{ width: '100%' }} />
+                    )}
+                  </div>
+                ) : null}
               </div>
             ) : null}
           </div>

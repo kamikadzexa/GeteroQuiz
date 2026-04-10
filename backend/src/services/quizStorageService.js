@@ -66,6 +66,35 @@ function getQuizPublicMediaPath(storageKey, filename) {
   return `/quiz-data/${storageKey}/media/${filename}`;
 }
 
+function isManagedQuizMediaUrl(storageKey, rawUrl) {
+  return typeof rawUrl === 'string' && rawUrl.startsWith(`/quiz-data/${storageKey}/media/`);
+}
+
+function collectReferencedQuizMediaFilenames(quiz, storageKey) {
+  const filenames = new Set();
+
+  for (const question of quiz.questions) {
+    [question.mediaUrl, question.correctAnswerMediaUrl].forEach((rawUrl) => {
+      if (!isManagedQuizMediaUrl(storageKey, rawUrl)) return;
+      filenames.add(path.basename(rawUrl));
+    });
+  }
+
+  return filenames;
+}
+
+function pruneUnusedQuizMedia(quiz, storageKey) {
+  const mediaDirectory = getQuizMediaDirectory(storageKey);
+  if (!fs.existsSync(mediaDirectory)) return;
+
+  const referenced = collectReferencedQuizMediaFilenames(quiz, storageKey);
+
+  for (const entry of fs.readdirSync(mediaDirectory)) {
+    if (referenced.has(entry)) continue;
+    fs.rmSync(path.join(mediaDirectory, entry), { force: true, recursive: true });
+  }
+}
+
 function sanitizeFilename(filename) {
   const extension = path.extname(filename || '');
   const stem = path
@@ -172,12 +201,18 @@ function buildQuizManifest(quiz, storageKey) {
         order: question.order,
         options: question.options,
         correctAnswer: question.correctAnswer,
+        correctAnswerMediaType: question.correctAnswerMediaType,
+        correctAnswerMediaUrl: question.correctAnswerMediaUrl,
         mediaType: question.mediaType,
         mediaUrl: question.mediaUrl,
         timeLimitSeconds: question.timeLimitSeconds,
         points: question.points,
         penaltyPoints: question.penaltyPoints,
+        roundName: question.roundName,
+        columnName: question.columnName,
+        specialType: question.specialType,
       })),
+      boardLayout: Array.isArray(quiz.boardLayout) ? quiz.boardLayout : [],
     },
   };
 }
@@ -195,6 +230,7 @@ async function syncQuizStorage(quizId) {
   const reloadedQuiz = await loadQuizWithQuestions(quizId);
   const quizDirectory = getQuizDirectory(storageKey);
   fs.mkdirSync(getQuizMediaDirectory(storageKey), { recursive: true });
+  pruneUnusedQuizMedia(reloadedQuiz, storageKey);
 
   fs.writeFileSync(
     path.join(quizDirectory, 'quiz.json'),
@@ -330,6 +366,7 @@ async function importQuizArchive(buffer) {
     accentColor: sourceQuiz.accentColor || '#ff6b6b',
     isPublished: sourceQuiz.isPublished ?? true,
     editorPinHash: sourceQuiz.editorPinHash || null,
+    boardLayout: Array.isArray(sourceQuiz.boardLayout) ? sourceQuiz.boardLayout : [],
   });
 
   const storageKey = await ensureQuizStorageKey(createdQuiz);
@@ -360,11 +397,16 @@ async function importQuizArchive(buffer) {
       order: question.order ?? index,
       options: Array.isArray(question.options) ? question.options : [],
       correctAnswer: question.correctAnswer || '',
+      correctAnswerMediaType: question.correctAnswerMediaType || 'none',
+      correctAnswerMediaUrl: normalizeImportedMediaUrl(question.correctAnswerMediaUrl || '', storageKey),
       mediaType: question.mediaType || 'none',
       mediaUrl: normalizeImportedMediaUrl(question.mediaUrl || '', storageKey),
       timeLimitSeconds: Number(question.timeLimitSeconds ?? 20),
       points: Number(question.points ?? 100),
       penaltyPoints: Number(question.penaltyPoints ?? 50),
+      roundName: question.roundName || '',
+      columnName: question.columnName || '',
+      specialType: question.specialType || 'normal',
     })),
   );
 

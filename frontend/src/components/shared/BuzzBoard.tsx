@@ -9,12 +9,10 @@ interface BuzzBoardProps {
   onSelectTile?: (tileId: number) => void
   isWaiting: boolean
   selectorName?: string
-}
-
-function SpecialBadge({ type }: { type: string }) {
-  if (type === 'cat_in_bag') return <span className="board-tile-badge cib">CiB</span>
-  if (type === 'stakes') return <span className="board-tile-badge stakes">$</span>
-  return null
+  allowDirectSelect?: boolean
+  emptyHint?: string
+  selectingHint?: string
+  yourTurnHint?: string
 }
 
 function Tile({
@@ -38,10 +36,7 @@ function Tile({
       {answered ? (
         <span className="board-tile-done">OK</span>
       ) : (
-        <>
-          <span className="board-tile-points">{tile.points}</span>
-          <SpecialBadge type={tile.specialType} />
-        </>
+        <span className="board-tile-points">{tile.points}</span>
       )}
     </button>
   )
@@ -55,9 +50,13 @@ export function BuzzBoard({
   onSelectTile,
   isWaiting,
   selectorName,
+  allowDirectSelect = false,
+  emptyHint,
+  selectingHint,
+  yourTurnHint,
 }: BuzzBoardProps) {
   const isSelector = selectingPlayerId != null && viewerPlayerId === selectingPlayerId
-  const canSelect = isSelector && isWaiting
+  const canSelect = (allowDirectSelect || isSelector) && isWaiting
 
   if (!isWaiting || columns.length === 0) return null
 
@@ -85,11 +84,13 @@ export function BuzzBoard({
 
       <div className="board-selector-hint">
         {isSelector ? (
-          <span className="board-selector-you">Pick a question above!</span>
+          <span className="board-selector-you">{yourTurnHint ?? 'Pick a question above!'}</span>
+        ) : allowDirectSelect ? (
+          <span className="board-selector-you">{yourTurnHint ?? 'Pick a question above!'}</span>
         ) : selectingPlayerId != null && selectorName ? (
-          <span>{selectorName} is selecting...</span>
+          <span>{selectingHint ?? `${selectorName} is selecting...`}</span>
         ) : (
-          <span style={{ color: 'var(--muted)' }}>Waiting for host to assign a selector</span>
+          <span style={{ color: 'var(--muted)' }}>{emptyHint ?? 'Waiting for host to assign a selector'}</span>
         )}
       </div>
     </div>

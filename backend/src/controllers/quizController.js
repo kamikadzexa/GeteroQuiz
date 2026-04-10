@@ -20,11 +20,27 @@ function serializeQuizDetail(quiz) {
     mode: quiz.mode,
     accentColor: quiz.accentColor,
     isPublished: quiz.isPublished,
+    boardLayout: Array.isArray(quiz.boardLayout) ? quiz.boardLayout : [],
     hasEditorPin: quizHasEditorPin(quiz),
     questions: quiz.questions,
     createdAt: quiz.createdAt,
     updatedAt: quiz.updatedAt,
   };
+}
+
+function normalizeBoardLayout(boardLayout) {
+  if (!Array.isArray(boardLayout)) return [];
+
+  return boardLayout.map((round, roundIndex) => ({
+    id: String(round?.id || `round-${roundIndex + 1}`),
+    name: String(round?.name || `Round ${roundIndex + 1}`),
+    columns: Array.isArray(round?.columns)
+      ? round.columns.map((column, columnIndex) => ({
+          id: String(column?.id || `column-${roundIndex + 1}-${columnIndex + 1}`),
+          name: String(column?.name || `Column ${columnIndex + 1}`),
+        }))
+      : [],
+  }));
 }
 
 async function listQuizzes(_req, res, next) {
@@ -78,6 +94,7 @@ async function createQuiz(req, res, next) {
       mode: req.body.mode || 'classic',
       accentColor: req.body.accentColor || '#ff6b6b',
       isPublished: req.body.isPublished ?? true,
+      boardLayout: normalizeBoardLayout(req.body.boardLayout),
       editorPinHash: await buildEditorPinHash(req.body.editorPin),
     });
 
@@ -100,8 +117,16 @@ async function updateQuiz(req, res, next) {
       mode: req.body.mode ?? quiz.mode,
       accentColor: req.body.accentColor ?? quiz.accentColor,
       isPublished: req.body.isPublished ?? quiz.isPublished,
+      boardLayout: req.body.boardLayout !== undefined ? normalizeBoardLayout(req.body.boardLayout) : quiz.boardLayout,
       ...(editorPinHash !== undefined ? { editorPinHash } : {}),
     });
+
+    if ((req.body.mode ?? quiz.mode) === 'buzz') {
+      await Question.update(
+        { type: 'text', options: [] },
+        { where: { quizId: quiz.id } },
+      );
+    }
 
     const updatedQuiz = await syncQuizStorage(req.params.quizId);
 
@@ -133,14 +158,15 @@ async function deleteQuiz(req, res, next) {
 async function createQuestion(req, res, next) {
   try {
     const quiz = await getQuizForRequest(req, req.params.quizId);
+    const isBuzzQuiz = quiz.mode === 'buzz';
 
     const question = await Question.create({
       quizId: quiz.id,
       prompt: req.body.prompt,
       helpText: req.body.helpText || '',
-      type: req.body.type || 'multiple_choice',
+      type: isBuzzQuiz ? 'text' : (req.body.type || 'multiple_choice'),
       order: req.body.order ?? 0,
-      options: req.body.options || [],
+      options: isBuzzQuiz ? [] : (req.body.options || []),
       correctAnswer: req.body.correctAnswer || '',
       correctAnswerMediaType: req.body.correctAnswerMediaType || 'none',
       correctAnswerMediaUrl: req.body.correctAnswerMediaUrl || '',
@@ -149,6 +175,7 @@ async function createQuestion(req, res, next) {
       timeLimitSeconds: req.body.timeLimitSeconds ?? 20,
       points: req.body.points ?? 100,
       penaltyPoints: req.body.penaltyPoints ?? 100,
+      roundName: req.body.roundName || '',
       columnName: req.body.columnName || '',
       specialType: req.body.specialType || 'normal',
     });
@@ -167,14 +194,15 @@ async function updateQuestion(req, res, next) {
       return res.status(404).json({ message: 'Question not found' });
     }
 
-    await getQuizForRequest(req, question.quizId);
+    const quiz = await getQuizForRequest(req, question.quizId);
+    const isBuzzQuiz = quiz.mode === 'buzz';
 
     await question.update({
       prompt: req.body.prompt ?? question.prompt,
       helpText: req.body.helpText ?? question.helpText,
-      type: req.body.type ?? question.type,
+      type: isBuzzQuiz ? 'text' : (req.body.type ?? question.type),
       order: req.body.order ?? question.order,
-      options: req.body.options ?? question.options,
+      options: isBuzzQuiz ? [] : (req.body.options ?? question.options),
       correctAnswer: req.body.correctAnswer ?? question.correctAnswer,
       correctAnswerMediaType: req.body.correctAnswerMediaType ?? question.correctAnswerMediaType ?? 'none',
       correctAnswerMediaUrl: req.body.correctAnswerMediaUrl ?? question.correctAnswerMediaUrl ?? '',
@@ -183,6 +211,7 @@ async function updateQuestion(req, res, next) {
       timeLimitSeconds: req.body.timeLimitSeconds ?? question.timeLimitSeconds,
       points: req.body.points ?? question.points,
       penaltyPoints: req.body.penaltyPoints ?? question.penaltyPoints,
+      roundName: req.body.roundName ?? question.roundName ?? '',
       columnName: req.body.columnName ?? question.columnName ?? '',
       specialType: req.body.specialType ?? question.specialType ?? 'normal',
     });
@@ -221,7 +250,6 @@ async function uploadQuizMedia(req, res, next) {
     }
 
     const upload = req.quizMediaUpload || await saveUploadedQuizMedia(req.params.quizId, req.file);
-    await syncQuizStorage(req.params.quizId);
 
     return res.status(201).json({
       filename: upload.filename,
