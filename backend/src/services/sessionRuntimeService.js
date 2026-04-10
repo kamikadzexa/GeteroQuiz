@@ -1,6 +1,7 @@
 const { Op } = require('sequelize');
 const { Answer, GameSession, Player, Question, Quiz, Score } = require('../models');
 const { createJoinCode, createRejoinCode, normalizeAnswer, sanitizeQuestion } = require('./utils');
+const { sortQuestionsByRoundOrder } = require('./quizStorageService');
 
 const AUTO_ANSWER_SECONDS = 60;
 const AUTO_ADVANCE_SECONDS = 15;
@@ -93,7 +94,7 @@ class SessionRuntimeService {
           include: [{ model: Question, as: 'questions' }],
         });
         if (quiz) {
-          quiz.questions.sort((a, b) => a.order - b.order);
+          sortQuestionsByRoundOrder(quiz.questions, quiz.boardLayout);
           const currentQ = quiz.questions[session.currentQuestionIndex];
           if (currentQ) state.boardAnsweredQuestionIds.delete(currentQ.id);
         }
@@ -335,7 +336,7 @@ class SessionRuntimeService {
 
     if (!session) throw new Error('Session not found');
 
-    session.quiz.questions.sort((left, right) => left.order - right.order);
+    sortQuestionsByRoundOrder(session.quiz.questions, session.quiz.boardLayout);
     session.players.sort((left, right) => left.createdAt - right.createdAt);
     return session;
   }
@@ -666,7 +667,7 @@ class SessionRuntimeService {
     });
 
     return sessions.map((session) => {
-      session.quiz.questions.sort((left, right) => left.order - right.order);
+      sortQuestionsByRoundOrder(session.quiz.questions, session.quiz.boardLayout);
       return this.createPublicSessionSummary(session);
     });
   }

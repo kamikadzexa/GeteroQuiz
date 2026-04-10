@@ -18,6 +18,19 @@ function slugify(value) {
     .slice(0, 48) || 'quiz';
 }
 
+function sortQuestionsByRoundOrder(questions, boardLayout) {
+  const layout = Array.isArray(boardLayout) ? boardLayout : [];
+  const roundIndex = Object.fromEntries(layout.map((round, i) => [round.name, i]));
+  const unassigned = layout.length;
+
+  questions.sort((a, b) => {
+    const ra = a.roundName ? (roundIndex[a.roundName] ?? unassigned) : unassigned;
+    const rb = b.roundName ? (roundIndex[b.roundName] ?? unassigned) : unassigned;
+    if (ra !== rb) return ra - rb;
+    return a.order - b.order;
+  });
+}
+
 async function loadQuizWithQuestions(quizId) {
   const quiz = await Quiz.findByPk(quizId, {
     include: [{ model: Question, as: 'questions' }],
@@ -27,7 +40,7 @@ async function loadQuizWithQuestions(quizId) {
     return null;
   }
 
-  quiz.questions.sort((left, right) => left.order - right.order);
+  sortQuestionsByRoundOrder(quiz.questions, quiz.boardLayout);
   return quiz;
 }
 
@@ -422,5 +435,6 @@ module.exports = {
   loadQuizWithQuestions,
   prepareQuizMediaUpload,
   saveUploadedQuizMedia,
+  sortQuestionsByRoundOrder,
   syncQuizStorage,
 };
