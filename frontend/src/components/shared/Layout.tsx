@@ -3,6 +3,8 @@ import { LanguageSwitcher } from './LanguageSwitcher'
 import { useI18n } from '../../context/I18nContext'
 import type { PropsWithChildren } from 'react'
 
+const APP_VERSION = '1.0.1'
+
 export function Layout({ children }: PropsWithChildren) {
   const location = useLocation()
   const { t } = useI18n()
@@ -34,6 +36,7 @@ export function Layout({ children }: PropsWithChildren) {
         </div>
       </header>
       <main className="page-frame">{children}</main>
+      <div className="app-version">v{APP_VERSION}</div>
     </div>
   )
 }
