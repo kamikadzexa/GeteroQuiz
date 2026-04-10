@@ -42,7 +42,7 @@ sudo apt autoremove -y
 ### Step 3. Install required system packages
 
 ```bash
-sudo apt install -y nginx git curl ufw snapd
+sudo apt install -y nginx git curl ufw snapd build-essential python3 make g++
 ```
 
 ### Step 4. Install Node.js 22
@@ -84,7 +84,7 @@ cd /var/www/getero-quiz
 
 ```bash
 cd /var/www/getero-quiz/backend
-npm install --production
+npm install --omit=dev
 ```
 
 ### Step 9. Create backend environment file
@@ -230,7 +230,7 @@ git pull origin main
 
 ```bash
 cd /var/www/getero-quiz/backend
-npm install --production
+npm install --omit=dev
 pm2 restart getero-quiz
 ```
 
@@ -316,7 +316,7 @@ sudo systemctl restart nginx
 
 ```bash
 cd /var/www/getero-quiz/backend
-npm install --production
+npm install --omit=dev
 pm2 restart getero-quiz
 
 cd /var/www/getero-quiz/frontend
@@ -401,7 +401,7 @@ sudo ufw status
 
 ```bash
 sudo apt update && sudo apt upgrade -y && sudo apt autoremove -y
-sudo apt install -y nginx git curl ufw snapd
+sudo apt install -y nginx git curl ufw snapd build-essential python3 make g++
 curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
 sudo apt install -y nodejs
 sudo npm install -g pm2
@@ -413,7 +413,7 @@ cd /var/www
 sudo git clone YOUR_REPO_URL getero-quiz
 sudo chown -R $USER:$USER /var/www/getero-quiz
 cd /var/www/getero-quiz/backend
-npm install --production
+npm install --omit=dev
 cd /var/www/getero-quiz/frontend
 npm install
 npm run build
@@ -425,7 +425,7 @@ npm run build
 cd /var/www/getero-quiz
 git pull origin main
 cd backend
-npm install --production
+npm install --omit=dev
 pm2 restart getero-quiz
 cd ../frontend
 npm install
@@ -480,6 +480,39 @@ Check:
 1. The domain points to the VPS public IP.
 2. Port 80 is open in the firewall.
 3. Nginx is running successfully before Certbot starts.
+
+### Backend install fails on `sqlite3` with `node-gyp` or `make not found`
+
+This means the server is missing build tools needed for native Node modules.
+
+Install them:
+
+```bash
+sudo apt update
+sudo apt install -y build-essential python3 make g++
+```
+
+Then retry the backend install:
+
+```bash
+cd /var/www/getero-quiz/backend
+rm -rf node_modules
+npm install --omit=dev
+```
+
+If you already created a broken partial install and want a cleaner retry:
+
+```bash
+cd /var/www/getero-quiz/backend
+rm -rf node_modules package-lock.json
+npm install --omit=dev
+```
+
+The warning about `--production` versus `--omit=dev` is not the failure. The actual blocker is usually:
+
+```text
+gyp ERR! stack Error: not found: make
+```
 
 ## 7. Project References
 
