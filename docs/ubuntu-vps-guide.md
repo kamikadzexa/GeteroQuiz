@@ -105,7 +105,7 @@ EOF
 
 ```bash
 cd /var/www/getero-quiz/backend
-pm2 start src/server.js --name getero-quiz --max-memory-restart 600M
+pm2 start src/server.js --name getero-quiz --max-memory-restart 512M
 pm2 save
 pm2 startup
 ```
