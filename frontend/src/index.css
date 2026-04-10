@@ -197,7 +197,7 @@ a {
 }
 
 .page-frame {
-  width: min(1600px, calc(100% - 2rem));
+  width: min(1920px, calc(100% - 2rem));
   margin: 0 auto;
   padding: 1.5rem 0 2rem;
 }
