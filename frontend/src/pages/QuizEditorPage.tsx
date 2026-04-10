@@ -373,6 +373,7 @@ export function QuizEditorPage() {
     if (!quiz) return
     const layout = sanitizeBoardLayout(quiz.boardLayout)
     const roundIdx = Object.fromEntries(layout.map((r, i) => [r.name, i]))
+
     const sorted = [...questions].sort((a, b) => {
       const ra = a.roundName ? (roundIdx[a.roundName] ?? layout.length) : layout.length
       const rb = b.roundName ? (roundIdx[b.roundName] ?? layout.length) : layout.length
@@ -386,11 +387,21 @@ export function QuizEditorPage() {
     if (index < 0 || nextIndex < 0 || nextIndex >= sorted.length) return
     if (sorted[index].roundName !== sorted[nextIndex].roundName) return
 
-    const aOrder = sorted[index].order
-    const bOrder = sorted[nextIndex].order
+    // Swap in the sorted array then reassign order=0,1,2,... across all questions
+    // so the backend's plain `order` sort always reflects the round-aware sequence.
+    const reordered = [...sorted]
+    ;[reordered[index], reordered[nextIndex]] = [reordered[nextIndex], reordered[index]]
 
-    patchQuestion(sorted[index].id, (q) => ({ ...q, order: bOrder }))
-    patchQuestion(sorted[nextIndex].id, (q) => ({ ...q, order: aOrder }))
+    setQuiz((current) => {
+      if (!current) return current
+      const orderMap = Object.fromEntries(reordered.map((q, i) => [q.id, i]))
+      const nextQuestions = current.questions.map((q) =>
+        orderMap[q.id] !== undefined ? { ...q, order: orderMap[q.id] } : q,
+      )
+      nextQuestions.forEach((q) => dirtyQuestionIdsRef.current.add(q.id))
+      queueAutosave()
+      return { ...current, questions: nextQuestions }
+    })
   }
 
   function moveOption(questionId: number, optionId: string, direction: -1 | 1) {
