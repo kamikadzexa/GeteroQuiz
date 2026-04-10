@@ -837,6 +837,44 @@ export function QuizEditorPage() {
                           {t('editor.removeOption')}
                         </button>
                       </div>
+                      {boardLayout.length > 1 && (
+                        <select
+                          className="inline-select"
+                          onChange={(event) => {
+                            const targetRoundId = event.target.value
+                            if (!targetRoundId) return
+                            patchQuiz((current) => {
+                              const targetRound = current.boardLayout.find((r) => r.id === targetRoundId)
+                              if (!targetRound) return current
+                              return {
+                                ...current,
+                                boardLayout: current.boardLayout.map((entry) => {
+                                  if (entry.id === round.id) {
+                                    return { ...entry, columns: entry.columns.filter((c) => c.id !== column.id) }
+                                  }
+                                  if (entry.id === targetRoundId) {
+                                    return { ...entry, columns: [...entry.columns, column] }
+                                  }
+                                  return entry
+                                }),
+                                questions: current.questions.map((question) =>
+                                  question.roundName === round.name && question.columnName === column.name
+                                    ? { ...question, roundName: targetRound.name }
+                                    : question,
+                                ),
+                              }
+                            })
+                          }}
+                          value=""
+                        >
+                          <option value="">{t('editor.moveColumnToRound')}</option>
+                          {boardLayout
+                            .filter((r) => r.id !== round.id)
+                            .map((r) => (
+                              <option key={r.id} value={r.id}>{r.name}</option>
+                            ))}
+                        </select>
+                      )}
                     </div>
                   ))}
                 </div>
