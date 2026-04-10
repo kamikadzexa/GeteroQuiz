@@ -49,6 +49,11 @@ async function assertQuizPinAccess(req, quiz) {
     return;
   }
 
+  // Authenticated admins and editors bypass the quiz PIN entirely
+  if (req.admin) {
+    return;
+  }
+
   const candidatePin = extractQuizPin(req);
   if (!candidatePin) {
     const error = new Error('Quiz PIN is required');
