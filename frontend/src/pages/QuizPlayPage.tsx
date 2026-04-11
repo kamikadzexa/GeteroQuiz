@@ -600,6 +600,17 @@ export function QuizPlayPage() {
                     <p>{selectedOption.id}. {selectedOption.text}</p>
                   </div>
                 ) : null}
+                {session.phase === 'review' && currentQuestion.correctAnswerMediaType && currentQuestion.correctAnswerMediaType !== 'none' && currentQuestion.correctAnswerMediaUrl ? (
+                  <div className="media-block answer-reveal-media">
+                    {currentQuestion.correctAnswerMediaType === 'image' ? (
+                      <img alt="Correct answer" className="media-visual" src={currentQuestion.correctAnswerMediaUrl} style={{ width: '100%', objectFit: 'contain' }} />
+                    ) : currentQuestion.correctAnswerMediaType === 'video' ? (
+                      <video autoPlay className="media-visual" controls key={`correct-${currentQuestion.id}`} src={currentQuestion.correctAnswerMediaUrl} style={{ width: '100%' }} />
+                    ) : (
+                      <audio autoPlay className="media-block" controls key={`correct-${currentQuestion.id}`} src={currentQuestion.correctAnswerMediaUrl} style={{ width: '100%' }} />
+                    )}
+                  </div>
+                ) : null}
               </div>
             ) : null}
 
@@ -618,6 +629,17 @@ export function QuizPlayPage() {
                     <strong>{t('play.correctText')}</strong>
                     <p>{currentQuestion.correctAnswer || '-'}</p>
                   </div>
+                  {currentQuestion.correctAnswerMediaType && currentQuestion.correctAnswerMediaType !== 'none' && currentQuestion.correctAnswerMediaUrl ? (
+                    <div className="media-block answer-reveal-media">
+                      {currentQuestion.correctAnswerMediaType === 'image' ? (
+                        <img alt="Correct answer" className="media-visual" src={currentQuestion.correctAnswerMediaUrl} style={{ width: '100%', objectFit: 'contain' }} />
+                      ) : currentQuestion.correctAnswerMediaType === 'video' ? (
+                        <video autoPlay className="media-visual" controls key={`correct-${currentQuestion.id}`} src={currentQuestion.correctAnswerMediaUrl} style={{ width: '100%' }} />
+                      ) : (
+                        <audio autoPlay className="media-block" controls key={`correct-${currentQuestion.id}`} src={currentQuestion.correctAnswerMediaUrl} style={{ width: '100%' }} />
+                      )}
+                    </div>
+                  ) : null}
                 </div>
               ) : (
                 <div className={viewerAnswer?.submittedAnswer ? 'text-answer-box submitted-box' : 'text-answer-box'}>
@@ -734,16 +756,17 @@ export function QuizPlayPage() {
                 </div>
                 {currentQuestion.correctAnswerMediaType && currentQuestion.correctAnswerMediaType !== 'none' && currentQuestion.correctAnswerMediaUrl ? (
                   <div className="media-block answer-reveal-media">
-                    {currentQuestion.correctAnswerMediaType === 'image' && (
+                    {currentQuestion.correctAnswerMediaType === 'image' ? (
                       <img
                         alt="Correct answer"
                         className="media-visual"
                         src={currentQuestion.correctAnswerMediaUrl}
                         style={{ width: '100%', objectFit: 'contain' }}
                       />
-                    )}
-                    {currentQuestion.correctAnswerMediaType === 'video' && (
-                      <video className="media-visual" controls src={currentQuestion.correctAnswerMediaUrl} style={{ width: '100%' }} />
+                    ) : currentQuestion.correctAnswerMediaType === 'video' ? (
+                      <video autoPlay className="media-visual" controls key={`correct-${currentQuestion.id}`} src={currentQuestion.correctAnswerMediaUrl} style={{ width: '100%' }} />
+                    ) : (
+                      <audio autoPlay className="media-block" controls key={`correct-${currentQuestion.id}`} src={currentQuestion.correctAnswerMediaUrl} style={{ width: '100%' }} />
                     )}
                   </div>
                 ) : null}

@@ -437,12 +437,12 @@ export function AdminSessionPage() {
             {t('admin.finishSession')}
           </button>
           <button
-            className={sessionState.mediaAutoplayEnabled ? 'cta-button secondary' : 'ghost-button'}
+            className={sessionState.mediaAutoplayEnabled ? 'ghost-button' : 'cta-button secondary'}
             disabled={actionBusy}
             onClick={() => { void toggleMediaAutoplay() }}
             type="button"
           >
-            {sessionState.mediaAutoplayEnabled ? t('admin.disableMediaAutoplay') : t('admin.enableMediaAutoplay')}
+            {sessionState.mediaAutoplayEnabled ? t('admin.pauseOnDisplay') : t('admin.playOnDisplay')}
           </button>
         </div>
 
@@ -578,7 +578,7 @@ export function AdminSessionPage() {
             {sessionState.currentQuestion.roundName ? <span className="round-label">{sessionState.currentQuestion.roundName}</span> : null}
             <h2>{sessionState.currentQuestion.prompt}</h2>
             {sessionState.currentQuestion.helpText ? <p className="helper-text">{sessionState.currentQuestion.helpText}</p> : null}
-            <QuestionMedia question={sessionState.currentQuestion} />
+            <QuestionMedia autoplay={false} question={sessionState.currentQuestion} />
             <div className="pill-row">
               <span className="chip">{sessionState.phase}</span>
               <span className="chip">{sessionState.answerCount} answers</span>

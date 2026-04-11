@@ -13,7 +13,6 @@ export function DisplaySessionPage() {
   const { joinCode = '' } = useParams()
   const { t } = useI18n()
   const [session, setSession] = useState<SessionState | null>(null)
-  const [localAutoplayOverride, setLocalAutoplayOverride] = useState<boolean | null>(null)
   const [error, setError] = useState('')
   const [splashQueue, setSplashQueue] = useState<Array<{ title: string; subtitle?: string; tone?: 'round' | 'special' }>>([])
   const [activeSplash, setActiveSplash] = useState<{ title: string; subtitle?: string; tone?: 'round' | 'special' } | null>(null)
@@ -68,8 +67,7 @@ export function DisplaySessionPage() {
     ? session.leaderboard.find((entry) => entry.playerId === session.boardSelectingPlayerId)?.displayName
     : undefined
 
-  // Effective autoplay: local override takes precedence, falls back to server setting
-  const effectiveAutoplay = localAutoplayOverride !== null ? localAutoplayOverride : (session?.mediaAutoplayEnabled ?? true)
+  const effectiveAutoplay = session?.mediaAutoplayEnabled ?? true
 
   const pushSplashes = useMemo(
     () => (items: Array<{ title: string; subtitle?: string; tone?: 'round' | 'special' }>) => {
@@ -285,9 +283,9 @@ export function DisplaySessionPage() {
                     {session.currentQuestion.correctAnswerMediaType === 'image' ? (
                       <img alt="Correct answer" className="media-visual" src={session.currentQuestion.correctAnswerMediaUrl} style={{ width: '100%', objectFit: 'contain' }} />
                     ) : session.currentQuestion.correctAnswerMediaType === 'video' ? (
-                      <video className="media-visual" controls src={session.currentQuestion.correctAnswerMediaUrl} style={{ width: '100%' }} />
+                      <video autoPlay={effectiveAutoplay} className="media-visual" controls key={`correct-${session.currentQuestion.id}`} src={session.currentQuestion.correctAnswerMediaUrl} style={{ width: '100%' }} />
                     ) : (
-                      <audio controls src={session.currentQuestion.correctAnswerMediaUrl} style={{ width: '100%' }} />
+                      <audio autoPlay={effectiveAutoplay} className="media-block" controls key={`correct-${session.currentQuestion.id}`} src={session.currentQuestion.correctAnswerMediaUrl} style={{ width: '100%' }} />
                     )}
                   </div>
                 ) : null}
@@ -319,18 +317,9 @@ export function DisplaySessionPage() {
         </section>
         <section className="panel compact-panel">
           <span className="eyebrow">{t('admin.mediaAutoplay')}</span>
-          <div className="action-row">
-            <span className={effectiveAutoplay ? 'chip active' : 'chip'}>
-              {effectiveAutoplay ? t('admin.mediaAutoplayOn') : t('admin.mediaAutoplayOff')}
-            </span>
-            <button
-              className={effectiveAutoplay ? 'cta-button secondary' : 'ghost-button'}
-              onClick={() => setLocalAutoplayOverride(!effectiveAutoplay)}
-              type="button"
-            >
-              {effectiveAutoplay ? t('admin.disableMediaAutoplay') : t('admin.enableMediaAutoplay')}
-            </button>
-          </div>
+          <span className={effectiveAutoplay ? 'chip active' : 'chip'}>
+            {effectiveAutoplay ? t('admin.mediaAutoplayOn') : t('admin.mediaAutoplayOff')}
+          </span>
         </section>
       </aside>
     </div>

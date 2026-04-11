@@ -766,6 +766,7 @@ class SessionRuntimeService {
     state.phase = 'open';
     this.resetAutoAdvanceSchedule(state);
     state.currentQuestionMediaVersion = Date.now();
+    state.mediaAutoplayEnabled = true;
     state.currentBuzzPlayerId = null;
     state.buzzAttemptText = '';
     state.deniedBuzzPlayerIds = new Set();
@@ -1104,6 +1105,7 @@ class SessionRuntimeService {
       this.resetQuestionTimer(state);
       this.resetAutoAdvanceSchedule(state);
       state.currentQuestionMediaVersion = Date.now();
+      state.mediaAutoplayEnabled = true;
       state.currentBuzzPlayerId = null;
       state.buzzAttemptText = '';
       session.phase = 'review';

@@ -6,11 +6,22 @@ export function QuestionMedia({ question, autoplay = true }: { question: Questio
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
 
+  // When the question changes (key forces new element, so currentTime is 0): play or skip
   useEffect(() => {
     const media = question.mediaType === 'audio' ? audioRef.current : videoRef.current
     if (!media || question.mediaType === 'none' || !question.mediaUrl) return
+    if (!autoplay) return
+    const playPromise = media.play()
+    if (playPromise && typeof playPromise.catch === 'function') {
+      playPromise.catch(() => {})
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [question.id, question.mediaType, question.mediaUrl, question.mediaVersion])
 
-    media.currentTime = 0
+  // When autoplay is toggled remotely: resume or pause without seeking
+  useEffect(() => {
+    const media = question.mediaType === 'audio' ? audioRef.current : videoRef.current
+    if (!media || question.mediaType === 'none' || !question.mediaUrl) return
     if (autoplay) {
       const playPromise = media.play()
       if (playPromise && typeof playPromise.catch === 'function') {
@@ -19,7 +30,8 @@ export function QuestionMedia({ question, autoplay = true }: { question: Questio
     } else {
       media.pause()
     }
-  }, [autoplay, question.id, question.mediaType, question.mediaUrl, question.mediaVersion])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoplay])
 
   if (question.mediaType === 'none' || !question.mediaUrl) return null
 
