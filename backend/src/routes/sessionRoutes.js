@@ -16,6 +16,7 @@ const {
   assistPlayer,
   kickPlayer,
   updateAutoAdvance,
+  updateMediaAutoplay,
   deleteSession,
   adjustScore,
   assignBoardSelector,
@@ -40,6 +41,7 @@ router.post('/:sessionId/close', requireStaff, closeQuestion);
 router.post('/:sessionId/finish', requireStaff, finishSession);
 router.post('/:sessionId/replay', requireStaff, replayQuestion);
 router.post('/:sessionId/auto-advance', requireStaff, updateAutoAdvance);
+router.post('/:sessionId/media-autoplay', requireStaff, updateMediaAutoplay);
 router.post('/:sessionId/answers/:answerId/judge', requireStaff, judgeAnswer);
 router.post('/:sessionId/buzz/judge', requireStaff, judgeBuzz);
 router.post('/:sessionId/board/assign-selector', requireStaff, assignBoardSelector);

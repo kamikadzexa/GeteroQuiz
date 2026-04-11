@@ -27,6 +27,7 @@ class SessionRuntimeService {
       autoAdvanceAction: null,
       sessionAnswerDurationSeconds: AUTO_ANSWER_SECONDS,
       currentQuestionMediaVersion: null,
+      mediaAutoplayEnabled: true,
       currentBuzzPlayerId: null,
       buzzAttemptText: '',
       deniedBuzzPlayerIds: new Set(),
@@ -545,6 +546,7 @@ class SessionRuntimeService {
       autoAdvancePaused: state.autoAdvancePaused,
       autoAdvanceDurationSeconds: state.autoAdvanceDurationSeconds,
       autoAdvanceRemainingSeconds: state.autoAdvanceRemainingSeconds,
+      mediaAutoplayEnabled: state.mediaAutoplayEnabled !== false,
       answerCount: currentAnswers.length,
       leaderboard: this.createLeaderboard(session),
       lockedBuzzPlayer: buzzPlayer
@@ -1407,6 +1409,13 @@ class SessionRuntimeService {
     await this.syncAutoAdvance(sessionId, session, {
       resetCountdown: enabled === true || hasDurationChange,
     });
+    await this.emitState(sessionId);
+    return this.getAdminSession(sessionId);
+  }
+
+  async updateMediaAutoplay(sessionId, enabled) {
+    const state = await this.ensureState(sessionId);
+    state.mediaAutoplayEnabled = Boolean(enabled);
     await this.emitState(sessionId);
     return this.getAdminSession(sessionId);
   }

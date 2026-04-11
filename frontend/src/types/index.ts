@@ -88,6 +88,7 @@ export interface SessionState {
   autoAdvancePaused: boolean
   autoAdvanceDurationSeconds: number
   autoAdvanceRemainingSeconds: number
+  mediaAutoplayEnabled: boolean
   answerCount: number
   leaderboard: LeaderboardEntry[]
   lockedBuzzPlayer: {

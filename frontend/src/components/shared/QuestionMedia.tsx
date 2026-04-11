@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { assetUrl } from '../../services/api'
 import type { Question } from '../../types'
 
-export function QuestionMedia({ question }: { question: Question }) {
+export function QuestionMedia({ question, autoplay = true }: { question: Question; autoplay?: boolean }) {
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
 
@@ -11,11 +11,15 @@ export function QuestionMedia({ question }: { question: Question }) {
     if (!media || question.mediaType === 'none' || !question.mediaUrl) return
 
     media.currentTime = 0
-    const playPromise = media.play()
-    if (playPromise && typeof playPromise.catch === 'function') {
-      playPromise.catch(() => {})
+    if (autoplay) {
+      const playPromise = media.play()
+      if (playPromise && typeof playPromise.catch === 'function') {
+        playPromise.catch(() => {})
+      }
+    } else {
+      media.pause()
     }
-  }, [question.id, question.mediaType, question.mediaUrl, question.mediaVersion])
+  }, [autoplay, question.id, question.mediaType, question.mediaUrl, question.mediaVersion])
 
   if (question.mediaType === 'none' || !question.mediaUrl) return null
 
@@ -27,8 +31,8 @@ export function QuestionMedia({ question }: { question: Question }) {
   }
 
   if (question.mediaType === 'audio') {
-    return <audio key={key} className="media-block" controls autoPlay ref={audioRef} src={source} />
+    return <audio key={key} className="media-block" controls autoPlay={autoplay} ref={audioRef} src={source} />
   }
 
-  return <video key={key} className="media-block media-visual" controls autoPlay ref={videoRef} src={source} />
+  return <video key={key} className="media-block media-visual" controls autoPlay={autoplay} ref={videoRef} src={source} />
 }

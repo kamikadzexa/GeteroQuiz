@@ -331,6 +331,19 @@ async function updateAutoAdvance(req, res, next) {
   }
 }
 
+async function updateMediaAutoplay(req, res, next) {
+  try {
+    await getSessionQuizForRequest(req, req.params.sessionId);
+    const state = await req.app.locals.runtimeService.updateMediaAutoplay(
+      req.params.sessionId,
+      req.body.enabled,
+    );
+    return res.json(state);
+  } catch (error) {
+    return next(error);
+  }
+}
+
 async function deleteSession(req, res, next) {
   try {
     await getSessionQuizForRequest(req, req.params.sessionId);
@@ -358,6 +371,7 @@ module.exports = {
   assistPlayer,
   kickPlayer,
   updateAutoAdvance,
+  updateMediaAutoplay,
   deleteSession,
   adjustScore,
   assignBoardSelector,

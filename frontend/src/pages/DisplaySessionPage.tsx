@@ -13,6 +13,7 @@ export function DisplaySessionPage() {
   const { joinCode = '' } = useParams()
   const { t } = useI18n()
   const [session, setSession] = useState<SessionState | null>(null)
+  const [localAutoplayOverride, setLocalAutoplayOverride] = useState<boolean | null>(null)
   const [error, setError] = useState('')
   const [splashQueue, setSplashQueue] = useState<Array<{ title: string; subtitle?: string; tone?: 'round' | 'special' }>>([])
   const [activeSplash, setActiveSplash] = useState<{ title: string; subtitle?: string; tone?: 'round' | 'special' } | null>(null)
@@ -66,6 +67,9 @@ export function DisplaySessionPage() {
   const boardSelectorName = session?.boardSelectingPlayerId != null
     ? session.leaderboard.find((entry) => entry.playerId === session.boardSelectingPlayerId)?.displayName
     : undefined
+
+  // Effective autoplay: local override takes precedence, falls back to server setting
+  const effectiveAutoplay = localAutoplayOverride !== null ? localAutoplayOverride : (session?.mediaAutoplayEnabled ?? true)
 
   const pushSplashes = useMemo(
     () => (items: Array<{ title: string; subtitle?: string; tone?: 'round' | 'special' }>) => {
@@ -149,39 +153,38 @@ export function DisplaySessionPage() {
     let active = true
     const socket = getSocket()
 
-    async function refresh() {
-      const next = await api.getPublicSession(joinCode)
-      if (!active) return
-      setSession(next)
-      return next
-    }
-
-    const sync = () => {
-      refresh().catch((loadError) => {
-        if (!active) return
-        setError(loadError instanceof Error ? loadError.message : 'Could not load display')
-      })
-    }
-
     if (!socket.connected) {
       socket.connect()
     }
 
-    refresh().then((nextSession) => {
+    api.getPublicSession(joinCode).then((nextSession) => {
+      if (!active) return
+      setSession(nextSession)
       if (nextSession?.id) {
         socket.emit('join-display-session', { sessionId: nextSession.id }, () => {})
       }
-    }).catch((loadError) => {
+    }).catch((loadError: unknown) => {
+      if (!active) return
       setError(loadError instanceof Error ? loadError.message : 'Could not load display')
     })
 
-    socket.on('session:state', sync)
-    socket.on('leaderboard:update', sync)
+    const syncState = (payload: SessionState) => {
+      if (!active) return
+      setSession(payload)
+    }
+
+    const syncLeaderboard = (leaderboard: SessionState['leaderboard']) => {
+      if (!active) return
+      setSession((prev) => prev ? { ...prev, leaderboard } : prev)
+    }
+
+    socket.on('session:state', syncState)
+    socket.on('leaderboard:update', syncLeaderboard)
 
     return () => {
       active = false
-      socket.off('session:state', sync)
-      socket.off('leaderboard:update', sync)
+      socket.off('session:state', syncState)
+      socket.off('leaderboard:update', syncLeaderboard)
     }
   }, [joinCode])
 
@@ -253,7 +256,7 @@ export function DisplaySessionPage() {
             {session.currentQuestion.roundName ? <span className="round-label">{session.currentQuestion.roundName}</span> : null}
             <h2>{session.currentQuestion.prompt}</h2>
             {session.currentQuestion.helpText ? <p className="helper-text">{session.currentQuestion.helpText}</p> : null}
-            {shouldShowQuestionMedia ? <QuestionMedia question={session.currentQuestion} /> : null}
+            {shouldShowQuestionMedia ? <QuestionMedia autoplay={effectiveAutoplay} question={session.currentQuestion} /> : null}
 
             {questionOptions.length > 0 ? (
               <div className="display-options-grid">
@@ -312,6 +315,21 @@ export function DisplaySessionPage() {
             <Link className="ghost-button" to={`/leaderboard/${joinCode}`}>
               {t('play.openLeaderboard')}
             </Link>
+          </div>
+        </section>
+        <section className="panel compact-panel">
+          <span className="eyebrow">{t('admin.mediaAutoplay')}</span>
+          <div className="action-row">
+            <span className={effectiveAutoplay ? 'chip active' : 'chip'}>
+              {effectiveAutoplay ? t('admin.mediaAutoplayOn') : t('admin.mediaAutoplayOff')}
+            </span>
+            <button
+              className={effectiveAutoplay ? 'cta-button secondary' : 'ghost-button'}
+              onClick={() => setLocalAutoplayOverride(!effectiveAutoplay)}
+              type="button"
+            >
+              {effectiveAutoplay ? t('admin.disableMediaAutoplay') : t('admin.enableMediaAutoplay')}
+            </button>
           </div>
         </section>
       </aside>

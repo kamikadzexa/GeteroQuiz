@@ -346,6 +346,8 @@ export const api = {
       { method: 'POST', body: JSON.stringify({ playerId }), quizPin },
       token,
     ),
+  updateMediaAutoplay: (token: string, sessionId: number, enabled: boolean, quizPin?: string) =>
+    request<AdminSessionState>(`/sessions/${sessionId}/media-autoplay`, { method: 'POST', body: JSON.stringify({ enabled }), quizPin }, token),
   closeStakesWager: (token: string, sessionId: number, quizPin?: string) =>
     request(`/sessions/${sessionId}/board/close-stakes`, { method: 'POST', quizPin }, token),
   deleteSession: (token: string, sessionId: number, quizPin?: string) =>

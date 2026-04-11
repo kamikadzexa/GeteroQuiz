@@ -32,6 +32,8 @@ export function QuizPlayPage() {
   const splashTimerRef = useRef<number | null>(null)
   const previousQuestionRef = useRef<{ id: number | null; roundName: string | null }>({ id: null, roundName: null })
   const announcedRoundRef = useRef<string | null>(null)
+  const prevPhaseRef = useRef<string | null>(null)
+  const prevQuestionIdRef = useRef<number | null>(null)
 
   const questionSecondsLeft = useCountdown(
     session?.phase === 'open' ? session.closesAt : null,
@@ -107,11 +109,41 @@ export function QuizPlayPage() {
     let active = true
     const socket = getSocket()
 
-    const sync = () => {
+    const doRefresh = () => {
       if (!active) return
       refresh().catch((loadError) => {
         setError(loadError instanceof Error ? loadError.message : 'Could not load session')
       })
+    }
+
+    const syncState = (payload: SessionState) => {
+      if (!active) return
+      const prevPhase = prevPhaseRef.current
+      const prevQuestionId = prevQuestionIdRef.current
+      const newPhase = payload.phase
+      const newQuestionId = payload.currentQuestion?.id ?? null
+      prevPhaseRef.current = newPhase
+      prevQuestionIdRef.current = newQuestionId
+
+      // Update session from socket payload, preserving viewer-specific fields
+      // (viewerAnswer/viewerScore are null in broadcast payload — keep local values unless question changed)
+      const questionChanged = newQuestionId !== prevQuestionId && prevQuestionId !== null
+      setSession((prev) => ({
+        ...payload,
+        viewerAnswer: questionChanged ? null : (payload.viewerAnswer ?? prev?.viewerAnswer ?? null),
+        viewerScore: payload.viewerScore ?? prev?.viewerScore ?? null,
+      }))
+
+      // HTTP refresh only when answer judgement may have changed
+      const phaseChangedToReview = newPhase === 'review' && prevPhase !== 'review'
+      if (phaseChangedToReview || questionChanged) {
+        doRefresh()
+      }
+    }
+
+    const syncLeaderboard = (leaderboard: SessionState['leaderboard']) => {
+      if (!active) return
+      setSession((prev) => prev ? { ...prev, leaderboard } : prev)
     }
 
     if (!socket.connected) socket.connect()
@@ -124,12 +156,12 @@ export function QuizPlayPage() {
           setError(result?.message || 'Could not connect to the live session')
           return
         }
-        sync()
+        doRefresh()
       },
     )
 
-    socket.on('session:state', sync)
-    socket.on('leaderboard:update', sync)
+    socket.on('session:state', syncState)
+    socket.on('leaderboard:update', syncLeaderboard)
     socket.on('player:kicked', () => {
       removeSession(joinCode)
       navigate(`/?code=${joinCode}`)
@@ -137,8 +169,8 @@ export function QuizPlayPage() {
 
     return () => {
       active = false
-      socket.off('session:state', sync)
-      socket.off('leaderboard:update', sync)
+      socket.off('session:state', syncState)
+      socket.off('leaderboard:update', syncLeaderboard)
       socket.off('player:kicked')
     }
   }, [joinCode, navigate, player, removeSession])

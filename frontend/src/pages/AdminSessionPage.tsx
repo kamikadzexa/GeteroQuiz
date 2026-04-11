@@ -166,6 +166,17 @@ export function AdminSessionPage() {
     finally { setActionBusy(false) }
   }
 
+  async function toggleMediaAutoplay() {
+    if (!token || !sessionState || actionBusy) return
+    setActionBusy(true)
+    try {
+      setError('')
+      const next = await api.updateMediaAutoplay(token, sessionState.id, !sessionState.mediaAutoplayEnabled, getStoredSessionPin(sessionId) || undefined)
+      setSessionState(next)
+    } catch (e) { setError(e instanceof Error ? e.message : 'Could not update media autoplay') }
+    finally { setActionBusy(false) }
+  }
+
   async function triggerHostAction(action: 'advance' | 'close' | 'replay' | 'finish') {
     if (!token || !sessionState || actionBusy) return
     try {
@@ -424,6 +435,14 @@ export function AdminSessionPage() {
           </button>
           <button className="ghost-button" disabled={actionBusy} onClick={() => { void triggerHostAction('finish') }} type="button">
             {t('admin.finishSession')}
+          </button>
+          <button
+            className={sessionState.mediaAutoplayEnabled ? 'cta-button secondary' : 'ghost-button'}
+            disabled={actionBusy}
+            onClick={() => { void toggleMediaAutoplay() }}
+            type="button"
+          >
+            {sessionState.mediaAutoplayEnabled ? t('admin.disableMediaAutoplay') : t('admin.enableMediaAutoplay')}
           </button>
         </div>
 
